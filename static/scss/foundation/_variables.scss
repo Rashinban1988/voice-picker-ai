@@ -1,0 +1,224 @@
+// @font
+// ミディアム
+@font-face {
+  font-family : 'NotoSansJpThin';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Thin.otf);
+}
+// ミディアム
+@font-face {
+  font-family : 'NotoSansJpMedium';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Medium.otf);
+}
+// レギュラー
+@font-face {
+  font-family : 'NotoSansJpRegular';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Regular.otf);
+}
+// ボールド
+@font-face {
+  font-family : 'NotoSansJpBold';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Bold.otf);
+}
+// Thin
+@font-face {
+  font-family : 'NotoSansJpThin';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Thin.otf);
+}
+// Light
+@font-face {
+  font-family : 'NotoSansJpLight';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Light.otf);
+}
+// black
+@font-face {
+  font-family : 'NotoSansJpBlack';
+  src: url(../../fonts/Noto_Sans_JP/NotoSansJP-Black.otf);
+}
+
+// NotoSerifJp
+@font-face {
+  font-family : 'NotoSerifJpRegular';
+  src: url(../../fonts/Noto_Serif_JP/NotoSerifJP-Regular.otf);
+}
+
+@font-face {
+  font-family : 'NotoSerifJpMedium';
+  src: url(../../fonts/Noto_Serif_JP/NotoSerifJP-Medium.otf);
+}
+
+@font-face {
+  font-family : 'NotoSerifJpBold';
+  src: url(../../fonts/Noto_Serif_JP/NotoSerifJP-Bold.otf);
+}
+
+@font-face {
+  font-family : 'gadugi';
+  src: url(../../fonts/gadugi.ttf);
+}
+
+@font-face {
+  font-family : 'JosefinSans';
+  src: url(../../fonts/Josefin_Sans/static/JosefinSans-Regular.ttf);
+}
+
+@font-face {
+  font-family : 'JosefinMedium';
+  src: url(../../fonts/Josefin_Sans/static/JosefinSans-Medium.ttf);
+}
+
+@font-face {
+  font-family : 'JosefinBold';
+  src: url(../../fonts/Josefin_Sans/static/JosefinSans-Bold.ttf);
+}
+
+@font-face {
+  font-family : 'RobotoBold';
+  src: url(../../fonts/Roboto/Roboto-Bold.ttf);
+}
+
+// Lato レギュラー
+@font-face {
+  font-family: 'LatoRegular';
+  src: url(../../fonts/Lato/Lato-Regular.ttf)
+  }
+  // Lato ボールド
+  @font-face {
+  font-family: 'LatoBold';
+  src: url(../../fonts/Lato/Lato-Bold.ttf)
+  }
+  // Lato Black
+  @font-face {
+  font-family: 'LatoBlack';
+  src: url(../../fonts/Lato/Lato-Black.ttf)
+  }
+
+  // Raleway Bold
+  @font-face {
+  font-family: 'RalewayBold';
+  src: url(../../fonts/Raleway/static/Raleway-Bold.ttf)
+  }
+
+  // Raleway Black
+  @font-face {
+  font-family: 'RalewayBlack';
+  src: url(../../fonts/Raleway/static/Raleway-Black.ttf)
+  }
+
+  // SawarabiMincho
+  @font-face {
+    font-family: 'SawarabiMincho';
+    src: url(../../fonts/Sawarabi_Mincho/SawarabiMincho-Regular.ttf)
+  }
+
+// ヘッダーの背景色
+$headerBgColor: #37506F;
+// メインカラー
+$mainColor: #F36C06;
+// メイン背景色
+$mainBgColor: #EFF2F5;
+// 見出し
+$headLine: 'NotoSansJpBold';
+// 本文
+$regularText : 'NotoSansJpRegular';
+
+$mediumText : 'NotoSansJpMedium';
+// 太字
+$boldText : 'NotoSansJpBold';
+// Thin
+$thinText : 'NotoSansJpThin';
+// メインタイトル
+$mainTitle: 'NotoSerifJpMedium';
+// タイトル下線カラー
+$titleUnderLineColor: #3A67A0;
+/*--------------------------------------------------*\
+| カラー                                             |
+\*--------------------------------------------------*/
+$textBk : #222;
+$textWht : #fff;
+$textRed : #BF0000;
+$txtUdrLine : #FFE543;
+$textNavy : #144A6F;
+
+
+/*--------------------------------------------------*\
+| レスポンシブ                                       |
+\*--------------------------------------------------*/
+$sp: 768px;
+
+@mixin sp {
+  @media screen and (max-width: ($sp)) {
+    @content;
+  }
+}
+
+@mixin pc {
+  @media screen and (min-width: ($sp)) {
+    @content;
+  }
+}
+/* パソコンで見たときは"pc"のclassがついた画像が表示される */
+.pc {
+  display: block !important;
+  &_inline {
+    display: inline;
+  }
+  &_fx {
+    display: flex;
+  }
+}
+.sp {
+  display: none !important;
+  &_inline {
+    display: none !important;
+  }
+  &_fx {
+    display: none !important;
+  }
+}
+
+/* スマートフォンで見たときは"sp"のclassがついた画像が表示される */
+@include sp {
+    .pc {
+      display: none !important;
+      &_fx {
+        display: none !important;
+      }
+      &_inline {
+        display: none !important;
+      }
+    }
+    .sp {
+      display: block !important;
+      &_inline {
+        display: inline !important;
+      }
+      &_fx {
+        display: flex !important;
+      }
+    }
+}
+
+/*--------------------------------------------------*\
+| utilty                                             |
+\*--------------------------------------------------*/
+.u {
+  &_pc {
+    display: block;
+    @include sp {
+      display: none;
+    }
+  }
+  &_sp {
+    display: none;
+
+    @include sp {
+      display: block;
+    }
+    &_imp {
+      display: none !important;
+      @include sp {
+        display: block;
+      }
+    }
+  }
+}

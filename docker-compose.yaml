@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  django:
+    build: .
+    image: matching_app
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    platform: linux/amd64
+    command: python manage.py runserver 0.0.0.0:${APP_PORT}
+    volumes:
+      - .:/code
+    networks:
+      - webdev
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    environment:
+      DATABASE_HOST: ${DATABASE_HOST}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+
+networks:
+  webdev:
+    external: true
+    driver: bridge

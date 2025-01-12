@@ -1,0 +1,10 @@
+{
+	"version": 3,
+	"file": "styles.css",
+	"sources": [
+		"styles.scss",
+		"job_seekers/styles.scss"
+	],
+	"names": [],
+	"mappings": "ACAA,AAAA,SAAS,CAAC;EACN,KAAK,EAAE,GAAG,GACb;;AACD,AAAA,UAAU,CAAC;EACP,KAAK,EAAE,IAAI,GACd"
+}
