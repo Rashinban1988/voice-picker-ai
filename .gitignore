@@ -1,0 +1,17 @@
+# Pythonのバイトコード
+__pycache__/
+*.py[cod]
+
+# 環境変数ファイル
+.env
+
+# マイグレーションファイル
+*/migrations/*
+
+# IDEの設定ファイル
+.vscode/
+.idea/
+
+# その他の無視したいファイル
+*.log
+*.sqlite3
