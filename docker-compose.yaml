@@ -3,7 +3,7 @@ version: '3.8'
 services:
   django:
     build: .
-    image: matching_app
+    image: django_app
     extra_hosts:
       - host.docker.internal:host-gateway
     platform: linux/amd64

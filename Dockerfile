@@ -3,7 +3,9 @@ FROM python:3.10
 
 # 必要なパッケージをインストール
 RUN apt-get update && apt-get install -y \
+    vim \
     curl \
+    ffmpeg \
     libssl-dev \
     libffi-dev \
     build-essential \
