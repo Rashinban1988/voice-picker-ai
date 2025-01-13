@@ -1,5 +1,5 @@
 """
-matching_appプロジェクトのURL設定。
+otomamay_appプロジェクトのURL設定。
 
 urlpatterns`リストはURLをビューにルーティングします。詳しくは
     https://docs.djangoproject.com/en/4.2/topics/http/urls/ を参照してください。
@@ -17,8 +17,11 @@ urlpatterns`リストはURLをビューにルーティングします。詳し�
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
+from . import views
 
 urlpatterns = [
+    path('', views.home, name='home'),
+    path('voice_picker/', include('voice_picker.urls')),
     path('admin/', admin.site.urls),
     path('job_seekers/', include('job_seekers.urls')),
     # path('common/', include('common.urls')),

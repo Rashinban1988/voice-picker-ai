@@ -15,3 +15,5 @@ __pycache__/
 # その他の無視したいファイル
 *.log
 *.sqlite3
+
+voice_picker/big_models/*

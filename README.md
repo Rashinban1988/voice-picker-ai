@@ -14,7 +14,7 @@
 
 ```bash
 git clone git@github.com:Rashinban1988/matching-app.git
-cd matching_app
+cd django_app
 ```
 
 ### 2. .envファイルを作成します。
@@ -35,7 +35,7 @@ docker compose up -d --build
 docker compose exec -it django bash
 ```
 
-### 5. データベースのマイグレーションyuh8tb
+### 5. データベースのマイグレーション
 
 データベースをマイグレーションします。
 

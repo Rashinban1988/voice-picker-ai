@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        {% include 'base/head.html' %}
+        <title>otomamay.s アプリ</title>
+    </head>
+<body class="text-center h-screen">
+    <header class="pt-16 h-3/5"> <!-- 黄金比に基づいて高さを調整 -->
+        <h1 class="text-3xl font-bold">Yamamoto Kazuya</h1>
+        <h2 class="text-xl">プログラマー</h2>
+    </header>
+    <main class="h-2/5 w-full bg-gray-200 flex flex-col justify-between items-center"> <!-- 黄金比に基づいて高さを調整 -->
+        <section class="">
+            <div class="pt-24">
+                <!-- アプリケーションの一覧 -->
+                <div class="flex flex-wrap justify-center">
+                    <a href="https://otomamay.vercel.app/voice-picker" class="m-4 w-40 bg-blue-200 rounded-lg p-4 transition-transform transform hover:scale-105 hover:shadow-lg">
+                        <p class="mt-2 text-center font-semibold">Voice Picker AI</p>
+                    </a>
+                    <a href="https://tech-blog.rakumanu.com/tech-blog/" class="m-4 w-40 bg-blue-200 rounded-lg p-4 transition-transform transform hover:scale-105 hover:shadow-lg">
+                        <p class="mt-2 text-center font-semibold">Tech Blog</p>
+                    </a>
+                </div>
+            </div>
+        </section>
+        <footer class="pb-10">
+            <p>&copy; 2023 otomamay.s</p>
+        </footer>
+    </main>
+</body>
+</html>
