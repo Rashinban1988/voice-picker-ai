@@ -14,7 +14,7 @@
 
 ```bash
 git clone git@github.com:Rashinban1988/matching-app.git
-cd django_app
+cd config
 ```
 
 ### 2. .envファイルを作成します。
