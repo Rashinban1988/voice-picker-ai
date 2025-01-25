@@ -3,7 +3,7 @@ version: '3.8'
 services:
   django:
     build: .
-    image: django_app
+    image: config
     extra_hosts:
       - host.docker.internal:host-gateway
     platform: linux/amd64
@@ -14,7 +14,9 @@ services:
       - webdev
     ports:
       - "${APP_PORT}:${APP_PORT}"
+      - 5678:5678
     environment:
+      DEBUG: True
       DATABASE_HOST: ${DATABASE_HOST}
       DATABASE_NAME: ${DATABASE_NAME}
       DATABASE_USER: ${DATABASE_USER}
