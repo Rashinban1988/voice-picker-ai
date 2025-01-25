@@ -17,19 +17,27 @@ urlpatterns`リストはURLをビューにルーティングします。詳し�
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
+from member_management.admin import admin_site
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from . import views
 
 urlpatterns = [
     path('', views.home, name='home'),
     path('voice_picker/', include('voice_picker.urls')),
-    path('admin/', admin.site.urls),
+    path('admin/', admin_site.urls),
     path('job_seekers/', include('job_seekers.urls')),
     # path('common/', include('common.urls')),
     # path('companies/', include('companies.urls')),
     # path('calendar/', include('calendar_app.urls')),
+    path('member_management/', include('member_management.urls')),
 ]
 
 if settings.DEBUG:
     urlpatterns += [
         path('__reload__/', include('django_browser_reload.urls')), # 開発用ブラウザ自動更新
+
+        # swagger
+        path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+        path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+        path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     ]

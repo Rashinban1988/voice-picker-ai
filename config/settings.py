@@ -13,7 +13,21 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import os
 from pathlib import Path
 from decouple import config
-import os
+from datetime import timedelta
+
+import debugpy
+import socket
+
+def is_port_open(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        return sock.connect_ex(("0.0.0.0", port)) == 0
+
+# デバッグ用のポートを開く
+debug_port = 5678
+if not is_port_open(debug_port):
+    debugpy.listen(("0.0.0.0", debug_port))  # ポートを5678に設定
+else:
+    print(f"ポート {debug_port} はすでに使用中です。")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,28 +37,43 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-++v4beu&sms$5_307nb@kz1paw!%x8cqui#tyupq22@pdxxujw'
+SECRET_KEY = config('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    'http://127.0.0.1:3000',
+    'http://localhost:3000',
+    'localhost:3000',
+    '*',
+]
 
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
-
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'sass_processor',
+    'django.contrib.admin', # 管理画面
+    'django.contrib.auth', # 認証
+    'django.contrib.contenttypes', # コンテンツタイプ
+    'django.contrib.sessions', # セッション
+    'django.contrib.messages', # メッセージ
+    'django.contrib.staticfiles', # 静的ファイル
+
+    # 3rd party
+    'sass_processor', # SASSプロセッサ
     'tailwind', # Tailwind CSS
     'theme', # Tailwind CSS
     'django_browser_reload', # 開発用ブラウザ自動更新
-    'rest_framework',
+    'django.contrib.sites', # サイト設定
+    'corsheaders',
+    'drf_spectacular', # Swagger
+    'rest_framework', # REST API
+    'rest_framework_simplejwt', # JWTトークン
+    # 'djoser', # 認証
+
+    # my apps
     'common',
     'job_seekers',
     'companies',
@@ -52,6 +81,15 @@ INSTALLED_APPS = [
     'member_management', # 会員管理
     'voice_picker',
 ]
+
+AUTH_USER_MODEL = 'member_management.User'  # 'member_management'はカスタムユーザーモデルを定義したアプリ名
+# Configure the JWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
+
+SITE_ID = 1  # 作成したサイトのID
 
 TAILWIND_APP_NAME = "theme"
 
@@ -64,10 +102,12 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 MIDDLEWARE = [
@@ -78,10 +118,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django_browser_reload.middleware.BrowserReloadMiddleware', # 開発用ブラウザ自動更新
 ]
 
-ROOT_URLCONF = 'django_app.urls'
+ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
@@ -99,7 +140,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'django_app.wsgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database
@@ -182,26 +223,35 @@ SASS_PROCESSOR_AUTO_INCLUDE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# メール設定
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='localhost')
+EMAIL_PORT = config('EMAIL_PORT', default=2525)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='support@rakumanu.com')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False)
+
+# ログ設定
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
         'file': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': 'debug.log',
+            'filename': 'django.log',  # ログファイル名
         },
+        # 'console': {
+        #     'level': 'DEBUG',
+        #     'class': 'logging.StreamHandler',
+        # },
     },
     'loggers': {
-        '': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': True,
-        },
         'django': {
             'handlers': ['file'],
-            'level': 'DEBUG',
-            'propagate': False,
+            'level': 'INFO',
+            'propagate': True,
         },
     },
 }
