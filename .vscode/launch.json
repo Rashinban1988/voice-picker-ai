@@ -2,21 +2,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Django (Docker)",
-            "type": "python",
-            "request": "launch",
-            "module": "manage",
-            "args": [
-                "runserver",
-                "0.0.0.0:8000"
-            ],
-            "justMyCode": true,
-            "env": {
-                "PYTHONPATH": "/app"
+            "name": "Python: Remote Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
             },
-            "remote": true,
-            "port": 5678,
-            "preLaunchTask": "docker-run: debug"
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "/code"
+                }
+            ]
         }
     ]
 }

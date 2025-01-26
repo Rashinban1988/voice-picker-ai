@@ -71,6 +71,18 @@ python manage.py tailwind start
 
 - VSCode 拡張機能: Tailwind CSS IntelliSense をインストールすると、TailwindCSSのコード補完が効きます。
 
+### 2. デバッグモードを有効にする
+
+- .envファイルにDEBUG=trueを設定してください。
+- docker-compose.yamlのcommandを以下のように変更してください。
+
+```bash
+command: sh -c "echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:8000 --noreload"
+```
+
+- VSCodeの拡張機能: Python Debugger をインストールしてください。
+- cmd + shift + d で「Python: Remote Attach」を選択してデバッグモードを有効にします。
+
 ## 注意事項
 
 - 本番環境での使用には、適切な設定とセキュリティ対策が必要です。
