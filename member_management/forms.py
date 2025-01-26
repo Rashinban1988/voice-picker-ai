@@ -9,10 +9,8 @@ class OrganizationForm:
         return True
 
 class MemberForm:
-    def __init__(self, member_id, sei, mei, email, phone_number):
+    def __init__(self, member_id, email, phone_number):
         self.member_id = member_id
-        self.sei = sei
-        self.mei = mei
         self.email = email
         self.phone_number = phone_number
 
