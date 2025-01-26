@@ -15,23 +15,8 @@ from pathlib import Path
 from decouple import config
 from datetime import timedelta
 
-import debugpy
-import socket
-
-def is_port_open(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        return sock.connect_ex(("0.0.0.0", port)) == 0
-
-# デバッグ用のポートを開く
-debug_port = 5678
-if not is_port_open(debug_port):
-    debugpy.listen(("0.0.0.0", debug_port))  # ポートを5678に設定
-else:
-    print(f"ポート {debug_port} はすでに使用中です。")
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -227,7 +212,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=2525)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='support@rakumanu.com')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='debug@debug.com')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False)

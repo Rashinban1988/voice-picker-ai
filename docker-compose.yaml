@@ -7,21 +7,15 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     platform: linux/amd64
-    command: python manage.py runserver 0.0.0.0:${APP_PORT}
+    # command: sh -c "python manage.py runserver 0.0.0.0:8000 --noreload" # デバッグ無
+    command: sh -c "echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:8000 --noreload" # デバッグ有
     volumes:
       - .:/code
     networks:
       - webdev
     ports:
       - "${APP_PORT}:${APP_PORT}"
-      - 5678:5678
-    environment:
-      DEBUG: True
-      DATABASE_HOST: ${DATABASE_HOST}
-      DATABASE_NAME: ${DATABASE_NAME}
-      DATABASE_USER: ${DATABASE_USER}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      - "${DEBUG_PORT}:${DEBUG_PORT}"
 
 networks:
   webdev:
