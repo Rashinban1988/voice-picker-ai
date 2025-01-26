@@ -15,7 +15,7 @@ class Status(models.TextChoices):
 
 class UploadedFile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='uploaded_files')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='uploaded_files', verbose_name='組織')
     file = models.FileField(upload_to='', verbose_name='ファイル')
     status = models.IntegerField(
         choices=Status.choices,

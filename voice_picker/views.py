@@ -17,6 +17,7 @@ from pydub import AudioSegment
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
@@ -47,15 +48,17 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
     serializer_class = UploadedFileSerializer
     parser_classes = (MultiPartParser, FormParser,)  # ファイルアップロードを許可するパーサーを追加
+    permission_classes = [IsAuthenticated] # 認証を要求
 
     def list(self, request, *args, **kwargs):
-        organization_id = request.query_params.get('organization_id')  # クエリパラメータからorganization_idを取得
+        user = self.request.user  # 現在のユーザーを取得
+        organization = user.organization  # ユーザーの組織を取得
 
         queryset = self.get_queryset()
-        if not organization_id:
+        if not organization:
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)  # organization_idがない場合のレスポンス
 
-        queryset = queryset.filter(organization_id=organization_id)  # organization_idでフィルタリング
+        queryset = queryset.filter(organization_id=organization.id)  # organization_idでフィルタリング
 
         response = super().list(request, *args, **kwargs)
         # レスポンスデータ内のファイル名をデコード
@@ -69,6 +72,9 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         # ロガーを取得
         logger = logging.getLogger(__name__)
         logger.debug("ファイルアップロードがリクエストされました。")
+
+        user = self.request.user  # 現在のユーザーを取得
+        organization = user.organization  # ユーザーの組織を取得
 
         # 組織IDを取得
         organization_id = request.data.get('organization_id')
@@ -92,6 +98,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
 class TranscriptionViewSet(viewsets.ModelViewSet):
     queryset = Transcription.objects.all()
     serializer_class = TranscriptionSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
