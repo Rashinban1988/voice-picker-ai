@@ -21,7 +21,7 @@ urlpatterns = [
     })), name='transcriptions-list'),
 
     # UploadedFileのIDに紐づいたTranscriptionの一覧を取得するための新しいパス
-    path('api/transcriptions/uploaded-file/<int:uploadedfile_id>/', csrf_exempt(TranscriptionViewSet.as_view({
+    path('api/transcriptions/uploaded-file/<uuid:uploadedfile_id>/', csrf_exempt(TranscriptionViewSet.as_view({
         'get': 'list'
     })), name='transcriptions-by-uploadedfile'),
 
