@@ -7,7 +7,7 @@ import uuid
 from member_management.models import Organization
 from django.utils.translation import gettext_lazy as _
 
-class Status(models.TextChoices):
+class Status(models.IntegerChoices):
     UNPROCESSED = 0, _('未処理')
     IN_PROGRESS = 1, _('処理中')
     PROCESSED = 2, _('処理済み')

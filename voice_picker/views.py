@@ -51,7 +51,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # 認証を要求
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user  # 現在のユーザーを取得
+        user = request.user  # 現在のユーザーを取得
         organization = user.organization  # ユーザーの組織を取得
 
         queryset = self.get_queryset()
@@ -73,21 +73,31 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         logger = logging.getLogger(__name__)
         logger.debug("ファイルアップロードがリクエストされました。")
 
-        user = self.request.user  # 現在のユーザーを取得
+        # ユーザーを取得
+        user = request.user
         organization = user.organization  # ユーザーの組織を取得
+
+        # リクエストデータに組織IDを追加
+        request.data['organization_id'] = organization.id
 
         # 組織IDを取得
         organization_id = request.data.get('organization_id')
 
         file_serializer = UploadedFileSerializer(data=request.data)
         if file_serializer.is_valid():
-            uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
+            try:
+                uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
+            except Exception as e:
+                logger.error(f"ファイル保存中にエラーが発生しました: {e}")
+                return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
             # 文字起こし処理を非同期で実行 Celeryを使う場合
             # transcribe_and_save_async.delay(temp_file_path, uploaded_file.id)
 
             return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
         else:
+            logger.info(f"ファイルアップロードに失敗しました: {file_serializer.errors}")
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def retrieve(self, request, *args, **kwargs):
@@ -265,7 +275,7 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
 
     try:
         uploaded_file = UploadedFile.objects.select_for_update().get(id=uploaded_file.id)
-        transcriptions = uploaded_file.transcription_set.all()
+        transcriptions = uploaded_file.transcription.all()
         all_transcription_text = "".join(transcription.text for transcription in transcriptions)
 
         summary_text = summarize_text(all_transcription_text)
