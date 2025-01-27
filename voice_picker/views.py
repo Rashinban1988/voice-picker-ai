@@ -116,7 +116,7 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         """
         queryset = super().get_queryset()
         # URLからuploadedfileのIDを取得するためのキーを修正する
-        uploadedfile_id = self.kwargs.get('uploadedfile_id')  # 修正が必要
+        uploadedfile_id = self.kwargs.get('uploadedfile_id')
         if uploadedfile_id is not None:
             queryset = queryset.filter(uploaded_file__id=uploadedfile_id)
         return queryset
