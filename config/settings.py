@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+from .logging_handlers import DailyRotatingFileHandler
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -217,6 +218,10 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False)
 
+# voice-pickerファイルアップロード設定
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 # ログ設定
 LOGGING = {
     'version': 1,
@@ -224,13 +229,10 @@ LOGGING = {
     'handlers': {
         'file': {
             'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': 'django.log',  # ログファイル名
+            'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'when': 'midnight', # 毎日真夜中にローテーション
+            'backupCount': 30,  # 30日分のバックアップを保持
         },
-        # 'console': {
-        #     'level': 'DEBUG',
-        #     'class': 'logging.StreamHandler',
-        # },
     },
     'loggers': {
         'django': {
