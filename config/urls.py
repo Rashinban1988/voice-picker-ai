@@ -17,10 +17,10 @@ urlpatterns`リストはURLをビューにルーティングします。詳し�
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
+from django.conf.urls.static import static
 from member_management.admin import admin_site
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from . import views
-
 urlpatterns = [
     path('', views.home, name='home'),
     path('voice_picker/', include('voice_picker.urls')),
@@ -41,3 +41,6 @@ if settings.DEBUG:
         path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
         path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) # メディアファイルの提供
