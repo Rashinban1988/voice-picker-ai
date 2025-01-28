@@ -223,13 +223,31 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ログ設定
+# プロジェクトのベースディレクトリを設定
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# logsディレクトリのパスを設定
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+
+# logsディレクトリが存在しない場合は作成
+if not os.path.exists(LOGS_DIR):
+    os.makedirs(LOGS_DIR)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
     'handlers': {
         'file': {
             'level': 'INFO',
             'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'filename': os.path.join(LOGS_DIR, 'django'),
+            'formatter': 'verbose',
             'when': 'midnight', # 毎日真夜中にローテーション
             'backupCount': 30,  # 30日分のバックアップを保持
         },
