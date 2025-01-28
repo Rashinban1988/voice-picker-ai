@@ -54,7 +54,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user  # 現在のユーザーを取得
         organization = user.organization  # ユーザーの組織を取得
 
-        queryset = self.get_queryset()
+        queryset = self.get_queryset().order_by('-created_at')
         if not organization:
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)  # organization_idがない場合のレスポンス
 
@@ -114,7 +114,7 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         """
         uploadedfileのIDに基づいてtranscriptionのクエリセットをフィルタリングする。
         """
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().order_by('created_at')
         # URLからuploadedfileのIDを取得するためのキーを修正する
         uploadedfile_id = self.kwargs.get('uploadedfile_id')
         if uploadedfile_id is not None:
