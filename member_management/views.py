@@ -108,3 +108,6 @@ class LoginView(View):
                 'token_type': 'Bearer',
             })
         return JsonResponse({'message': 'ログイン情報が正しくありません'}, status=401)
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer

@@ -26,8 +26,6 @@ COPY requirements.txt /code/
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-RUN pip install debugpy
-
 # プロジェクトのファイルをコンテナにコピー
 COPY . /code/
 
