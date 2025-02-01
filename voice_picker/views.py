@@ -54,23 +54,26 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user  # 現在のユーザーを取得
         organization = user.organization  # ユーザーの組織を取得
 
-        queryset = self.get_queryset().order_by('-created_at')
         if not organization:
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)  # organization_idがない場合のレスポンス
 
-        queryset = queryset.filter(organization_id=organization.id)  # organization_idでフィルタリング
+        queryset = UploadedFile.objects.all()
+        queryset = queryset.filter(organization=organization) # 組織に紐づいたUploadedFileを取得
+        queryset = queryset.order_by('-created_at') # 作成日時の降順で取得
 
-        response = super().list(request, *args, **kwargs)
+        serializer = self.get_serializer(queryset, many=True) # シリアライズ
+        response = Response(serializer.data) # json形式でレスポンス
+
         # レスポンスデータ内のファイル名をデコード
         for item in response.data:
-            if 'file' in item and isinstance(item['file'], str):
-                item['file'] = unquote(item['file'])
+            if 'file' in item and isinstance(item['file'], str):  # itemが辞書であり、fileが存在することを確認
+                item['file'] = unquote(item['file'])  # ファイル名をデコード
         response['Content-Type'] = 'application/json; charset=utf-8'
         return response
 
     def create(self, request, *args, **kwargs):
         # ロガーを取得
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger('django')
         logger.debug("ファイルアップロードがリクエストされました。")
 
         # ユーザーを取得
