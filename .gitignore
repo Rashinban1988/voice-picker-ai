@@ -16,4 +16,11 @@ __pycache__/
 *.log
 *.sqlite3
 
+# モデルファイル
 voice_picker/big_models/*
+
+# ログファイル
+logs/*
+
+# ファイルアップロード
+media/*

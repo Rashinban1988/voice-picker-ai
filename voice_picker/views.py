@@ -21,7 +21,8 @@ from rest_framework.permissions import IsAuthenticated
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
-
+import torch
+import whisper
 from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
 
@@ -29,20 +30,18 @@ from .serializers import TranscriptionSerializer, UploadedFileSerializer
 load_dotenv()
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-# @lru_cache(maxsize=1)
-# def get_whisper_model():
-#     import torch
-#     import whisper
-#     # オープンソースWhisperモデルのロード
-#     # GPUを使用する場合
-#     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     # whisper_model = whisper.load_model("tiny").to(device)
+@lru_cache(maxsize=1)
+def get_whisper_model():
+    # オープンソースWhisperモデルのロード
+    # GPUを使用する場合
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # whisper_model = whisper.load_model("tiny").to(device)
 
-#     # CPUを使用するように設定
-#     # device = torch.device("cpu")
-#     # whisper_model = whisper.load_model("tiny").to(device)
+    # CPUを使用するように設定
+    device = torch.device("cpu")
+    whisper_model = whisper.load_model("tiny").to(device)
 
-#     return whisper_model
+    return whisper_model
 
 class UploadedFileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
@@ -54,23 +53,26 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user  # 現在のユーザーを取得
         organization = user.organization  # ユーザーの組織を取得
 
-        queryset = self.get_queryset()
         if not organization:
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)  # organization_idがない場合のレスポンス
 
-        queryset = queryset.filter(organization_id=organization.id)  # organization_idでフィルタリング
+        queryset = UploadedFile.objects.all()
+        queryset = queryset.filter(organization=organization) # 組織に紐づいたUploadedFileを取得
+        queryset = queryset.order_by('-created_at') # 作成日時の降順で取得
 
-        response = super().list(request, *args, **kwargs)
+        serializer = self.get_serializer(queryset, many=True) # シリアライズ
+        response = Response(serializer.data) # json形式でレスポンス
+
         # レスポンスデータ内のファイル名をデコード
         for item in response.data:
-            if 'file' in item and isinstance(item['file'], str):
-                item['file'] = unquote(item['file'])
+            if 'file' in item and isinstance(item['file'], str):  # itemが辞書であり、fileが存在することを確認
+                item['file'] = unquote(item['file'])  # ファイル名をデコード
         response['Content-Type'] = 'application/json; charset=utf-8'
         return response
 
     def create(self, request, *args, **kwargs):
         # ロガーを取得
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger('django')
         logger.debug("ファイルアップロードがリクエストされました。")
 
         # ユーザーを取得
@@ -114,7 +116,7 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         """
         uploadedfileのIDに基づいてtranscriptionのクエリセットをフィルタリングする。
         """
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().order_by('created_at')
         # URLからuploadedfileのIDを取得するためのキーを修正する
         uploadedfile_id = self.kwargs.get('uploadedfile_id')
         if uploadedfile_id is not None:
@@ -166,17 +168,17 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     logger.debug(f"ファイルパス: {file_path}")
 
     # モデルのロード
-    # try:
-    #     # Voskモデルのロード
-    #     # base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    #     # model_path = os.path.join(base_path, 'models/vosk-model-ja-0.22')
-    #     # vosk_model = Model(model_path)
+    try:
+        # Voskモデルのロード
+        # base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # model_path = os.path.join(base_path, 'models/vosk-model-ja-0.22')
+        # vosk_model = Model(model_path)
 
-    #     whisper_model = get_whisper_model()
-    #     print(whisper_model)
-    # except Exception as e:
-    #     logger.error(f"モデルのロードに失敗しました: {e}")
-    #     return
+        whisper_model = get_whisper_model()
+        print(whisper_model)
+    except Exception as e:
+        logger.error(f"モデルのロードに失敗しました: {e}")
+        return
 
     # 音声ファイルの読み込みと調整
     try:
@@ -217,16 +219,16 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
                     # transcription_text = result['text'] if 'text' in result else ''
                 # ----------------------------------voskの音声分析 おわり----------------------------------
                 # ----------------------------------open ai whisper1 音声分析 はじめ-----------------------
-                transcription = client.audio.transcriptions.create(
-                    model = "whisper-1",
-                    file = open(temp_file_path, "rb"),
-                    language = "ja",
-                    prompt = "この音声は、日本語で話されています。",
-                )
-                transcription_text = transcription.text
-                all_transcription_text += transcription_text
-                # API呼び出し後に待機時間を追加
-                time.sleep(0.7)  # 1分間に100回の制限を考慮して0.7秒待機（85回）
+                # transcription = client.audio.transcriptions.create(
+                #     model = "whisper-1",
+                #     file = open(temp_file_path, "rb"),
+                #     language = "ja",
+                #     prompt = "この音声は、日本語で話されています。",
+                # )
+                # transcription_text = transcription.text
+                # all_transcription_text += transcription_text
+                # # API呼び出し後に待機時間を追加
+                # time.sleep(0.7)  # 1分間に100回の制限を考慮して0.7秒待機（85回）
                 # ----------------------------------open ai whisper1 音声分析 おわり-----------------------
                 # ----------------------------------オープンソースWhisper音声分析 はじめ-----------------------
                 # GPUを使用する場合
@@ -235,11 +237,11 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
                 # all_transcription_text += transcription_text
 
                 # CPUを使用して転写
-                # with torch.no_grad():
-                #     result = whisper_model.transcribe(temp_file_path, fp16=False)
-                # transcription_text = result["text"]
-                # print(transcription_text)
-                # all_transcription_text += transcription_text
+                with torch.no_grad():
+                    result = whisper_model.transcribe(temp_file_path, fp16=False)
+                transcription_text = result["text"]
+                print(transcription_text)
+                all_transcription_text += transcription_text
                 # ----------------------------------オープンソースWhisper音声分析 おわり-----------------------
 
                 # 分析処理終了

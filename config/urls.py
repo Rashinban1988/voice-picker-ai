@@ -17,9 +17,12 @@ urlpatterns`リストはURLをビューにルーティングします。詳し�
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
+from django.conf.urls.static import static
 from member_management.admin import admin_site
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from . import views
+from django.views.static import serve
+from django.urls import re_path
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -35,6 +38,7 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += [
         path('__reload__/', include('django_browser_reload.urls')), # 開発用ブラウザ自動更新
+        re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}), # メディアファイルの提供
 
         # swagger
         path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
