@@ -16,7 +16,7 @@ from .models.organization import Organization
 from .schemas import UserCreate, OrganizationCreate
 import json
 import logging
-
+from decouple import config
 logger = logging.getLogger('django')
 
 class RegisterView(View):
@@ -65,9 +65,9 @@ class RegisterView(View):
         return JsonResponse(response, status=status.HTTP_201_CREATED)
 
     def send_verification_email(self, user):
-        subject = 'メールアドレスの確認'
+        subject = '【Voice Picker AI】メールアドレスの確認'
         verification_link = reverse('verify_email', kwargs={'uidb64': urlsafe_base64_encode(force_bytes(user.pk))})
-        message = f'以下のリンクをクリックしてメールアドレスを確認してください:\nhttp://localhost:8000{verification_link}'
+        message = f'以下のリンクをクリックしてメールアドレスを確認してください:\n{config("APP_HOST")}:{config("APP_PORT")}{verification_link}'
 
         send_mail(
             subject=subject,
