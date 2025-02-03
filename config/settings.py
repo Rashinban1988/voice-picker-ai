@@ -71,7 +71,7 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'member_management.User'  # 'member_management'はカスタムユーザーモデルを定義したアプリ名
 # Configure the JWT settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=120),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
