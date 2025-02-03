@@ -39,7 +39,7 @@ def get_whisper_model():
 
     # CPUを使用するように設定
     device = torch.device("cpu")
-    whisper_model = whisper.load_model("tiny").to(device)
+    whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
 
