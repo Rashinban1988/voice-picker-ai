@@ -4,6 +4,8 @@ from openai import OpenAI
 import os
 import time
 import warnings
+import re
+import webvtt
 # import wave
 
 import numpy as np
@@ -26,10 +28,14 @@ import torch
 import whisper
 from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
+from pyannote.audio import Pipeline
 
 # 環境変数をロードする
 load_dotenv()
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+# ダイアライゼーションのためのモデルをロード
+pyannote_auth_token = os.getenv('PYANNOTE_AUTH_TOKEN')
 
 # ロガーを取得
 django_logger = logging.getLogger('django')
@@ -44,7 +50,7 @@ def get_whisper_model():
     # CPUを使用するように設定
     device = torch.device("cpu")
 
-    whisper_model = whisper.load_model("small").to(device)
+    whisper_model = whisper.load_model("tiny").to(device)
 
     return whisper_model
 
@@ -201,6 +207,14 @@ def process_audio(file_path, file_extension):
 
     return new_file_path, ".wav"
 
+def millisec(timeStr):
+    """
+    文字列形式（HH:MM:SS）からミリ秒に変換
+    """
+    spl = timeStr.split(":")
+    s = (int)((int(spl[0]) * 60 * 60 + int(spl[1]) * 60 + float(spl[2])) * 1000)
+    return s
+
 # @shared_task # Celeryを使う場合コメントアウトを外す
 # def transcribe_and_save_async(file_path, uploaded_file_id):
 def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
@@ -215,119 +229,97 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         bool: 成功した場合はTrue、失敗した場合はFalse
     """
 
-    processing_logger.debug("文字起こし処理がリクエストされました。")
-    processing_logger.debug(f"ファイルパス: {file_path}")
-
-    # モデルのロード
+    # デバッグログを入れていく
     try:
-        # Voskモデルのロード
-        # base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # model_path = os.path.join(base_path, 'models/vosk-model-ja-0.22')
-        # vosk_model = Model(model_path)
+        t1 = 0 * 1000  # Works in milliseconds
+        t2 = 20 * 60 * 1000
+
+        # ファイルのパスを取得
+        file_path = UploadedFile.objects.get(id=uploaded_file_id).file.path
+        file_extension = os.path.splitext(file_path)[1]
+
+        if file_extension != ".wav":
+            file_path, file_extension = process_audio(file_path, file_extension)
+
+        audio = AudioSegment.from_wav(file_path)
+        audio = audio[t1:t2]
+        audio.export(file_path, format="wav")
+
+        # pyannote.audioは音声の最初の0.5秒を切り捨てるため、0.5秒のスペーサーを追加
+        spacer_milli = 500
+        spacer = AudioSegment.silent(duration=spacer_milli)
+        audio = spacer.append(audio, crossfade=0)
+        audio.export(file_path, format="wav")
+
+        # ダイアライゼーション
+        pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
+        print(f"pipeline: {pipeline}")
+        dz = pipeline(file_path)
+
+        # RTTM形式でダイアライゼーションの出力をディスクに書き出す
+        with open("audio.rttm", "w") as rttm:
+            dz.write_rttm(rttm)
+
+        with open("diarization.txt", "w") as text_file:
+            text_file.write(str(dz))
+
+        dz = open("diarization.txt").read().splitlines()
+        dzList = []
+        for line in dz:
+            start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=line))
+            start = millisec(start) - spacer_milli
+            end = millisec(end) - spacer_milli
+            lex = not re.findall('SPEAKER_01', string=line)
+            dzList.append([start, end, lex])
+
+        sounds = spacer
+        segments = []
+
+        for l in dz:
+            start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
+            start = int(millisec(start))  # milliseconds
+            end = int(millisec(end))  # milliseconds
+
+            segments.append(len(sounds))
+            sounds = sounds.append(audio[start:end], crossfade=0)
+            sounds = sounds.append(spacer, crossfade=0)
+
+        sounds.export("dz.wav", format="wav")  # Exports to a wav file in the current path.
 
         whisper_model = get_whisper_model()
-        print(whisper_model)
-    except Exception as e:
-        processing_logger.error(f"モデルのロードに失敗しました: {e}")
-        return
 
-    # 音声ファイルの読み込みと調整
-    try:
-        file_path = os.path.join('/code', file_path)
-        file_extension = os.path.splitext(file_path)[1].lower()
-        processing_logger.info(f"file_path: {file_path}")
-        processing_logger.info(f"file_extension: {file_extension}")
+        # 各話者のセグメントに対して文字起こしを行う
+        for i, (start, end, lex) in enumerate(dzList):
+            segment_audio = sounds[segments[i]:segments[i + 1]]  # 各セグメントを取得
+            temp_file_path = f"temp_segment_{i}.wav"
+            segment_audio.export(temp_file_path, format="wav")
 
-        if file_extension in [".mp4", ".mp3", ".m4a", ".wav"]:
-            file_path, file_extension = process_audio(file_path, file_extension)
-        else:
-            raise ValueError("サポートされていない音声形式です。")
+            # Whisperを使用して文字起こし
+            with torch.no_grad():
+                result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
+            transcription_text = result.get("text", "")
 
-        audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
+            # 話者名を決定
+            speaker_name = 'SPEAKER_01' if not lex else 'Other'
+            print(f"Speaker: {speaker_name}, Start: {start}, End: {end}, Text: {transcription_text}")
 
-        # ノイズ除去（noisereduceライブラリを使用）
-        audio_np = np.array(audio.get_array_of_samples())
-        reduced_noise = nr.reduce_noise(y=audio_np, sr=16000)
+            # 文字起こし結果を保存
+            serializer_class = TranscriptionSerializer(data={
+                "start_time": start / 1000,
+                "text": transcription_text,
+                "uploaded_file": uploaded_file_id,
+                "speaker": speaker_name,  # 話者名を追加
+            })
+            if serializer_class.is_valid():
+                serializer_class.save()
+            else:
+                processing_logger.error(f"文字起こし結果の保存に失敗しました: {serializer_class.errors}")
 
-        # 音声データを再構築
-        audio = AudioSegment(
-            reduced_noise.tobytes(),
-            frame_rate=16000,
-            sample_width=2,
-            channels=1
-        )
+            os.remove(temp_file_path)  # 一時ファイルを削除
 
-        # 音声のボリュームを一定にする、複数人の音声が入る場合、ボリューム調整が効果的
-        audio = audio.normalize()
-    except Exception as e:
-        processing_logger.error(f"ファイルの読み込みに失敗しました: {e}")
-        return
-
-    # 音声ファイルを指定秒数ごとに分割して文字起こし
-    try:
-        split_interval = 15 * 1000  # ミリ秒単位
-        all_transcription_text = ""
-        for i, start_time in enumerate(range(0, len(audio), split_interval)):
-            end_time = min(start_time + split_interval, len(audio))
-            split_audio = audio[start_time:end_time]
-            temp_file_path = f"temp_{i}.wav"
-            try:
-                split_audio.export(temp_file_path, format="wav")
-
-                # ----------------------------------voskの音声分析 はじめ----------------------------------
-                # with wave.open(temp_file_path, 'rb') as wf:
-                    # 分析処理
-                    # rec = KaldiRecognizer(vosk_model, wf.getframerate())
-                    # while True:
-                    #     data = wf.readframes(1000)
-                    #     if len(data) == 0:
-                    #         break
-                    #     if rec.AcceptWaveform(data):
-                    #         pass
-                    # result = json.loads(rec.FinalResult())
-                    # transcription_text = result['text'] if 'text' in result else ''
-                # ----------------------------------voskの音声分析 おわり----------------------------------
-                # ----------------------------------open ai whisper1 音声分析 はじめ-----------------------
-                # transcription = client.audio.transcriptions.create(
-                #     model = "whisper-1",
-                #     file = open(temp_file_path, "rb"),
-                #     language = "ja",
-                #     prompt = "この音声は、日本語で話されています。",
-                # )
-                # transcription_text = transcription.text
-                # all_transcription_text += transcription_text
-                # # API呼び出し後に待機時間を追加
-                # time.sleep(0.7)  # 1分間に100回の制限を考慮して0.7秒待機（85回）
-                # ----------------------------------open ai whisper1 音声分析 おわり-----------------------
-                # ----------------------------------オープンソースWhisper音声分析 はじめ-----------------------
-                # GPUを使用する場合
-                # result = whisper_model.transcribe(temp_file_path)
-                # transcription_text = result["text"]
-                # all_transcription_text += transcription_text
-
-                # CPUを使用して転写
-                with torch.no_grad():
-                    result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
-                transcription_text = result.get("text", "")
-                print(transcription_text)
-                all_transcription_text += transcription_text
-                # ----------------------------------オープンソースWhisper音声分析 おわり-----------------------
-
-                # 分析処理終了
-                serializer_class = TranscriptionSerializer(data={
-                    "start_time": start_time / 1000,
-                    "text": transcription_text,
-                    "uploaded_file": uploaded_file_id,
-                })
-                if serializer_class.is_valid():
-                    serializer_class.save()
-                else:
-                    processing_logger.error(f"文字起こし結果の保存に失敗しました: {serializer_class.errors}")
-            finally:
-                os.remove(temp_file_path)
         return True
     except Exception as e:
-        processing_logger.error(f"文字起こし処理中にエラーが発生しました: {e}")
+        processing_logger.error(f"文字起こし処理中にエラーが発生しました: {e} line: {e.__traceback__.tb_lineno}")
         return False
 
 @transaction.atomic

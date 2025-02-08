@@ -8,6 +8,7 @@ class Transcription(models.Model):
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='transcription', verbose_name='アップロードファイル')
     start_time = models.IntegerField(verbose_name='開始時間（秒）')  # 開始時間（秒）
     text = models.TextField(verbose_name='文字起こしテキスト')  # 文字起こしテキスト
+    speaker = models.CharField(verbose_name='話者', max_length=100, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
