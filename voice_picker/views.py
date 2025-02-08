@@ -7,6 +7,7 @@ import warnings
 # import wave
 
 import numpy as np
+import noisereduce as nr
 from functools import lru_cache
 # from celery import shared_task
 from django.db import transaction
@@ -185,8 +186,25 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         file_path = os.path.join('/code', file_path)
         file_extension = os.path.splitext(file_path)[1].lower()
         if file_extension in [".wav", ".mp3", ".m4a", ".mp4"]:
-            # 音声の正規化と増幅（音声のボリュームを均一化）
+            # 音声の読み込み
             audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2)
+
+            # サンプリングレートの調整（必要に応じて）
+            audio = audio.set_frame_rate(16000)
+
+            # ノイズ除去（noisereduceライブラリを使用）
+            audio_np = np.array(audio.get_array_of_samples())
+            reduced_noise = nr.reduce_noise(y=audio_np, sr=16000)
+
+            # 音声データを再構築
+            audio = AudioSegment(
+                reduced_noise.tobytes(),
+                frame_rate=16000,
+                sample_width=audio.sample_width,
+                channels=audio.channels
+            )
+
+            # 音声の正規化
             audio = audio.normalize()  # 音声の正規化
         else:
             raise ValueError("サポートされていない音声形式です。")
@@ -238,7 +256,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
                 # CPUを使用して転写
                 with torch.no_grad():
-                    result = whisper_model.transcribe(temp_file_path, fp16=False)
+                    result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
                 transcription_text = result["text"]
                 print(transcription_text)
                 all_transcription_text += transcription_text
