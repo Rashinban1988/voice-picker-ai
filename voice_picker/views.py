@@ -41,10 +41,9 @@ def get_whisper_model():
     # オープンソースWhisperモデルのロード
     # GPUを使用する場合
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # whisper_model = whisper.load_model("tiny").to(device)
-
     # CPUを使用するように設定
     device = torch.device("cpu")
+
     whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
@@ -172,6 +171,36 @@ def handle_uploaded_file(f):
 
     api_logger.info(f"handle_uploaded_file get response: {'status': 'file uploaded'}")
 
+# 音声ファイルの処理
+def process_audio(file_path, file_extension):
+    processing_logger.info(f"process_audio get request: {file_path}")
+    processing_logger.info(f"process_audio get request: {file_extension}")
+    if file_extension == ".wav":
+        return file_path, file_extension
+
+    # 音声ファイルを読み込む
+    audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
+    processing_logger.info(f"audio: {audio}")
+    # サンプリングレート、ビット深度、チャンネル数の設定
+    # audio = audio.set_frame_rate(16000)  # サンプリングレートを16000Hzに変換
+    # audio = audio.set_sample_width(2)     # 16bitに変換
+    # audio = audio.set_channels(1)         # モノラルに変換
+
+    # 新しいファイル名を作成
+    new_file_path = file_path.rsplit(".", 1)[0] + ".wav"
+
+    # WAV形式でエクスポート
+    try:
+        audio.export(new_file_path, format="wav")  # 新しいファイル名を指定
+    except Exception as e:
+        raise RuntimeError(f"ファイルのエクスポートに失敗しました: {e}")
+
+    # 新しいファイルが作成されたか確認
+    if not os.path.exists(new_file_path):
+        raise FileNotFoundError(f"エクスポートされたファイルが見つかりません: {new_file_path}")
+
+    return new_file_path, ".wav"
+
 # @shared_task # Celeryを使う場合コメントアウトを外す
 # def transcribe_and_save_async(file_path, uploaded_file_id):
 def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
@@ -206,29 +235,30 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     try:
         file_path = os.path.join('/code', file_path)
         file_extension = os.path.splitext(file_path)[1].lower()
-        if file_extension in [".wav", ".mp3", ".m4a", ".mp4"]:
-            # 音声の読み込み
-            audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2)
+        processing_logger.info(f"file_path: {file_path}")
+        processing_logger.info(f"file_extension: {file_extension}")
 
-            # サンプリングレートの調整（必要に応じて）
-            audio = audio.set_frame_rate(16000)
-
-            # ノイズ除去（noisereduceライブラリを使用）
-            audio_np = np.array(audio.get_array_of_samples())
-            reduced_noise = nr.reduce_noise(y=audio_np, sr=16000)
-
-            # 音声データを再構築
-            audio = AudioSegment(
-                reduced_noise.tobytes(),
-                frame_rate=16000,
-                sample_width=audio.sample_width,
-                channels=audio.channels
-            )
-
-            # 音声の正規化
-            audio = audio.normalize()  # 音声の正規化
+        if file_extension in [".mp4", ".mp3", ".m4a", ".wav"]:
+            file_path, file_extension = process_audio(file_path, file_extension)
         else:
             raise ValueError("サポートされていない音声形式です。")
+
+        audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
+
+        # ノイズ除去（noisereduceライブラリを使用）
+        audio_np = np.array(audio.get_array_of_samples())
+        reduced_noise = nr.reduce_noise(y=audio_np, sr=16000)
+
+        # 音声データを再構築
+        audio = AudioSegment(
+            reduced_noise.tobytes(),
+            frame_rate=16000,
+            sample_width=2,
+            channels=1
+        )
+
+        # 音声のボリュームを一定にする、複数人の音声が入る場合、ボリューム調整が効果的
+        audio = audio.normalize()
     except Exception as e:
         processing_logger.error(f"ファイルの読み込みに失敗しました: {e}")
         return
