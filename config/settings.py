@@ -210,7 +210,7 @@ SASS_PROCESSOR_AUTO_INCLUDE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# メール設定
+# メール設定-----------------------------------------------------------------------------------------------
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=2525)
@@ -219,11 +219,11 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 
-# voice-pickerファイルアップロード設定
+# voice-pickerファイルアップロード設定-----------------------------------------------------------------------
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# ログ設定
+# ログ設定------------------------------------------------------------------------------------------------
 # プロジェクトのベースディレクトリを設定
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -244,7 +244,7 @@ LOGGING = {
         },
     },
     'handlers': {
-        'file': {
+        'django_file': {
             'level': 'INFO',
             'class': 'config.logging_handlers.DailyRotatingFileHandler',
             'filename': os.path.join(LOGS_DIR, 'django'),
@@ -252,12 +252,39 @@ LOGGING = {
             'when': 'midnight', # 毎日真夜中にローテーション
             'backupCount': 30,  # 30日分のバックアップを保持
         },
+        'api_file': {
+            'level': 'INFO',
+            'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'filename': os.path.join(LOGS_DIR, 'api'),
+            'formatter': 'verbose',
+            'when': 'midnight', # 毎日真夜中にローテーション
+            'backupCount': 30,  # 30日分のバックアップを保持
+        },
+        'processing_file': {
+            'level': 'INFO',
+            'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'filename': os.path.join(LOGS_DIR, 'processing'),
+            'formatter': 'verbose',
+            'when': 'midnight', # 毎日真夜中にローテーション
+            'backupCount': 30,  # 30日分のバックアップを保持
+        },
     },
     'loggers': {
         'django': {
-            'handlers': ['file'],
+            'handlers': ['django_file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'processing': {
+            'handlers': ['processing_file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'api': {
+            'handlers': ['api_file'],
             'level': 'INFO',
             'propagate': True,
         },
     },
 }
+# ------------------------------------------------------------------------------------------------
