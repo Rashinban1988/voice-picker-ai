@@ -5,13 +5,14 @@ from voice_picker.views import transcribe_and_save, text_generation_save
 from voice_picker.models.uploaded_file import Status
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('processing')
 
 class Command(BaseCommand):
     help = '音声ファイルを文字起こしする'
 
     @transaction.atomic
     def handle(self, *args, **options):
+        logger.info('文字起こし処理を開始します。')
         # transcriptionを持っていないuploaded_fileを取得
         uploaded_files = UploadedFile.objects.filter(transcription__isnull=True, status=Status.UNPROCESSED).select_for_update()
 
