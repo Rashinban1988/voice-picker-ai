@@ -12,7 +12,9 @@ cffi==1.17.1
 chardet==4.0.0
 charset-normalizer==3.4.0
 click==8.1.7
+contourpy==1.3.1
 cookiecutter==2.6.0
+cycler==0.12.1
 debugpy==1.8.12
 distro==1.9.0
 Django==5.0.9
@@ -28,6 +30,7 @@ djangorestframework-simplejwt==5.3.0
 drf-spectacular==0.28.0
 exceptiongroup==1.2.2
 filelock==3.17.0
+fonttools==4.56.0
 fsspec==2024.12.0
 h11==0.14.0
 httpcore==1.0.7
@@ -36,17 +39,21 @@ idna==3.10
 inflection==0.5.1
 Jinja2==3.1.4
 jiter==0.8.2
+joblib==1.4.2
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
+kiwisolver==1.4.8
 libsass==0.23.0
 llvmlite==0.44.0
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
+matplotlib==3.10.0
 mdurl==0.1.2
 more-itertools==10.6.0
 mpmath==1.3.0
 mysqlclient==2.2.6
 networkx==3.4.2
+noisereduce==3.0.3
 nose==1.3.7
 numba==0.61.0
 numpy==2.1.3
@@ -66,6 +73,7 @@ nvidia-nvtx-cu12==12.4.127
 openai==1.59.6
 openai-whisper @ git+https://github.com/openai/whisper.git@517a43ecd132a2089d85f4ebc044728a71d49f6e
 packaging==24.2
+pillow==11.1.0
 pip-tools==7.4.1
 psutil==6.1.1
 pycparser==2.22
@@ -74,6 +82,7 @@ pydantic_core==2.27.2
 pydub==0.25.1
 Pygments==2.18.0
 PyJWT==2.10.1
+pyparsing==3.2.1
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
 python-decouple==3.8
@@ -87,6 +96,7 @@ requests==2.32.3
 rich==13.9.4
 rjsmin==1.2.2
 rpds-py==0.22.3
+scipy==1.15.1
 six==1.16.0
 sniffio==1.3.1
 sqlparse==0.5.2
