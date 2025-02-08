@@ -257,7 +257,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
                 # CPUを使用して転写
                 with torch.no_grad():
                     result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
-                transcription_text = result["text"]
+                transcription_text = result.get("text", "")
                 print(transcription_text)
                 all_transcription_text += transcription_text
                 # ----------------------------------オープンソースWhisper音声分析 おわり-----------------------
