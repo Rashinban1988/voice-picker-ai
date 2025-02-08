@@ -187,10 +187,19 @@ def process_audio(file_path, file_extension):
     # 音声ファイルを読み込む
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
-    # サンプリングレート、ビット深度、チャンネル数の設定
-    # audio = audio.set_frame_rate(16000)  # サンプリングレートを16000Hzに変換
-    # audio = audio.set_sample_width(2)     # 16bitに変換
-    # audio = audio.set_channels(1)         # モノラルに変換
+
+    # ノイズ除去
+    samples = np.array(audio.get_array_of_samples())
+    reduced_noise = nr.reduce_noise(y=samples, sr=audio.frame_rate)
+    audio = AudioSegment(
+        reduced_noise.tobytes(),
+        frame_rate=audio.frame_rate,
+        sample_width=audio.sample_width,
+        channels=audio.channels
+    )
+
+    # 音声の正規化
+    audio = audio.normalize()
 
     # 新しいファイル名を作成
     new_file_path = file_path.rsplit(".", 1)[0] + ".wav"
@@ -215,6 +224,134 @@ def millisec(timeStr):
     s = (int)((int(spl[0]) * 60 * 60 + int(spl[1]) * 60 + float(spl[2])) * 1000)
     return s
 
+def preprocess_audio(audio, t1, t2, file_path):
+    """
+    音声を調整する。
+    """
+    audio = audio.set_frame_rate(16000)  # サンプリングレートを16000Hzに変換
+    audio = audio.set_sample_width(2)     # 16bitに変換
+    audio = audio.set_channels(1)         # モノラルに変換
+    audio = audio[t1:t2]
+    audio.export(file_path, format="wav")
+
+    # 0.5秒のスペーサーを追加
+    spacer_milli = 500
+    spacer = AudioSegment.silent(duration=spacer_milli)
+    audio = spacer.append(audio, crossfade=0)
+    audio.export(file_path, format="wav")
+
+    return audio
+
+def perform_diarization(file_path):
+    """
+    音声ファイルをダイアライゼーション（話者分離）する。
+    """
+    pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
+    return pipeline(file_path)
+
+def save_diarization_output(dz):
+    """
+    ダイアライゼーション（話者分離）の結果を保存する。
+    """
+    with open("diarization.rttm", "w") as rttm:
+        dz.write_rttm(rttm)
+    with open("diarization.txt", "w") as text_file:
+        text_file.write(str(dz))
+
+def extract_speakers(dz):
+    """
+    ダイアライゼーション（話者分離）の結果から話者を抽出する。
+    """
+    spacer_milli = 500
+    dz = open("diarization.txt").read().splitlines()
+    speakers = set()
+    dzList = []
+    for line in dz:
+        start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=line))
+        start = millisec(start) - spacer_milli
+        end = millisec(end) - spacer_milli
+        speaker_match = re.findall(r'SPEAKER_\d+', line)
+        speaker = speaker_match[0] if speaker_match else None
+        speakers.add(speaker)
+        dzList.append([start, end, speaker])
+    return dzList
+
+def create_audio_segments(audio, dzList, file_path):
+    """
+    音声ファイルをセグメントに分割する。
+    同じ話者の音声は20秒まで同じセグメントにまとめる。
+    """
+    spacer_milli = 500
+    spacer = AudioSegment.silent(duration=spacer_milli)
+    sounds = spacer
+    segments = []
+
+    current_speaker = None
+    current_segment = AudioSegment.silent(duration=0)
+    max_segment_duration = 20 * 1000
+    for l in dzList:
+        start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
+        start = int(millisec(start))
+        end = int(millisec(end))
+
+        # 話者を取得
+        speaker = re.findall(r'SPEAKER_\d+', l)[0] if re.findall(r'SPEAKER_\d+', l) else None
+
+        # 現在のセグメントに音声を追加
+        current_segment = current_segment.append(audio[start:end], crossfade=0)
+
+        # セグメントの長さをチェック
+        if len(current_segment) >= max_segment_duration or speaker != current_speaker:
+            # セグメントをsoundsに追加
+            sounds = sounds.append(current_segment, crossfade=0)
+            segments.append(len(sounds))  # 現在のsoundsの長さを記録
+            sounds = sounds.append(spacer, crossfade=0)  # スペーサーを追加
+            current_segment = AudioSegment.silent(duration=0)  # 現在のセグメントをリセット
+
+        current_speaker = speaker
+
+    # 最後のセグメントが残っている場合は追加
+    if len(current_segment) > 0:
+        sounds = sounds.append(current_segment, crossfade=0)
+        segments.append(len(sounds))
+        sounds = sounds.append(spacer, crossfade=0)
+
+    sounds.export(file_path, format="wav")
+    return sounds, segments
+
+def export_segment(sounds, segments, i):
+    """
+    セグメントをエクスポートする。
+    """
+    segment_audio = sounds[segments[i]:segments[i + 1]]
+    temp_file_path = f"temp_segment_{i}.wav"
+    segment_audio.export(temp_file_path, format="wav")
+    return temp_file_path
+
+def transcribe_segment(whisper_model, temp_file_path):
+    """
+    セグメントを文字起こしする。
+    """
+    with torch.no_grad():
+        result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
+        transcription_text = result.get("text", "")
+    return transcription_text
+
+def save_transcription(transcription_text, start, uploaded_file_id, speaker):
+    """
+    文字起こし結果を保存する。
+    """
+    serializer_class = TranscriptionSerializer(data={
+        "start_time": int(start / 1000),
+        "text": transcription_text,
+        "uploaded_file": uploaded_file_id,
+        "speaker": speaker,
+    })
+    if serializer_class.is_valid():
+        serializer_class.save()
+    else:
+        processing_logger.error(f"transcription_textが空です: {transcription_text}")
+
 # @shared_task # Celeryを使う場合コメントアウトを外す
 # def transcribe_and_save_async(file_path, uploaded_file_id):
 def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
@@ -229,7 +366,6 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         bool: 成功した場合はTrue、失敗した場合はFalse
     """
 
-    # デバッグログを入れていく
     try:
         t1 = 0 * 1000  # Works in milliseconds
         t2 = 20 * 60 * 1000
@@ -242,84 +378,28 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             file_path, file_extension = process_audio(file_path, file_extension)
 
         audio = AudioSegment.from_wav(file_path)
-        audio = audio[t1:t2]
-        audio.export(file_path, format="wav")
-
-        # pyannote.audioは音声の最初の0.5秒を切り捨てるため、0.5秒のスペーサーを追加
-        spacer_milli = 500
-        spacer = AudioSegment.silent(duration=spacer_milli)
-        audio = spacer.append(audio, crossfade=0)
-        audio.export(file_path, format="wav")
+        audio = preprocess_audio(audio, t1, t2, file_path)  # 音声の前処理を関数化
 
         # ダイアライゼーション
-        pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
-        print(f"pipeline: {pipeline}")
-        dz = pipeline(file_path)
+        dz = perform_diarization(file_path) # ダイアライゼーションを行う
+        save_diarization_output(dz) # 出力を保存する
 
-        # RTTM形式でダイアライゼーションの出力をディスクに書き出す
-        with open("audio.rttm", "w") as rttm:
-            dz.write_rttm(rttm)
+        dzList = extract_speakers(dz) # 話者を抽出する
 
-        with open("diarization.txt", "w") as text_file:
-            text_file.write(str(dz))
-
-        dz = open("diarization.txt").read().splitlines()
-        dzList = []
-        for line in dz:
-            start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=line))
-            start = millisec(start) - spacer_milli
-            end = millisec(end) - spacer_milli
-            lex = not re.findall('SPEAKER_01', string=line)
-            dzList.append([start, end, lex])
-
-        sounds = spacer
-        segments = []
-
-        for l in dz:
-            start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
-            start = int(millisec(start))  # milliseconds
-            end = int(millisec(end))  # milliseconds
-
-            segments.append(len(sounds))
-            sounds = sounds.append(audio[start:end], crossfade=0)
-            sounds = sounds.append(spacer, crossfade=0)
-
-        sounds.export("dz.wav", format="wav")  # Exports to a wav file in the current path.
+        sounds, segments = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
 
         whisper_model = get_whisper_model()
 
         # 各話者のセグメントに対して文字起こしを行う
-        for i, (start, end, lex) in enumerate(dzList):
-            segment_audio = sounds[segments[i]:segments[i + 1]]  # 各セグメントを取得
-            temp_file_path = f"temp_segment_{i}.wav"
-            segment_audio.export(temp_file_path, format="wav")
-
-            # Whisperを使用して文字起こし
-            with torch.no_grad():
-                result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
-            transcription_text = result.get("text", "")
-
-            # 話者名を決定
-            speaker_name = 'SPEAKER_01' if not lex else 'Other'
-            print(f"Speaker: {speaker_name}, Start: {start}, End: {end}, Text: {transcription_text}")
-
-            # 文字起こし結果を保存
-            serializer_class = TranscriptionSerializer(data={
-                "start_time": int(start / 1000),
-                "text": transcription_text,
-                "uploaded_file": uploaded_file_id,
-                "speaker": speaker_name,  # 話者名を追加
-            })
-            if serializer_class.is_valid():
-                serializer_class.save()
-            else:
-                processing_logger.error(f"文字起こし結果の保存に失敗しました: {serializer_class.errors}")
-
+        for i, (start, end, speaker) in enumerate(dzList):
+            temp_file_path = export_segment(sounds, segments, i) # セグメントをエクスポートする
+            transcription_text = transcribe_segment(whisper_model, temp_file_path) # セグメントを文字起こしする
+            save_transcription(transcription_text, start, uploaded_file_id, speaker) # 結果を保存する
             os.remove(temp_file_path)  # 一時ファイルを削除
 
         return True
     except Exception as e:
-        processing_logger.error(f"文字起こし処理中にエラーが発生しました: {e} line: {e.__traceback__.tb_lineno}")
+        processing_logger.error(f"エラーが発生しました: {e}")
         return False
 
 @transaction.atomic
