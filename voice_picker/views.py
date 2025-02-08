@@ -31,6 +31,11 @@ from .serializers import TranscriptionSerializer, UploadedFileSerializer
 load_dotenv()
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
+# ロガーを取得
+django_logger = logging.getLogger('django')
+api_logger = logging.getLogger('api')
+processing_logger = logging.getLogger('processing')
+
 @lru_cache(maxsize=1)
 def get_whisper_model():
     # オープンソースWhisperモデルのロード
@@ -51,11 +56,13 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated] # 認証を要求
 
     def list(self, request, *args, **kwargs):
+        api_logger.info(f"UploadedFile list request: {request.GET}")
         user = request.user  # 現在のユーザーを取得
         organization = user.organization  # ユーザーの組織を取得
 
         if not organization:
-            return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)  # organization_idがない場合のレスポンス
+            api_logger.error("organization_idがない")
+            return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
 
         queryset = UploadedFile.objects.all()
         queryset = queryset.filter(organization=organization) # 組織に紐づいたUploadedFileを取得
@@ -69,12 +76,12 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             if 'file' in item and isinstance(item['file'], str):  # itemが辞書であり、fileが存在することを確認
                 item['file'] = unquote(item['file'])  # ファイル名をデコード
         response['Content-Type'] = 'application/json; charset=utf-8'
+
+        api_logger.info(f"UploadedFile list response: {response.data}")
         return response
 
     def create(self, request, *args, **kwargs):
-        # ロガーを取得
-        logger = logging.getLogger('django')
-        logger.debug("ファイルアップロードがリクエストされました。")
+        api_logger.info(f"UploadedFile create request: {request.POST}")
 
         # ユーザーを取得
         user = request.user
@@ -91,7 +98,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             try:
                 uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
             except Exception as e:
-                logger.error(f"ファイル保存中にエラーが発生しました: {e}")
+                django_logger.error(f"ファイル保存中にエラーが発生しました: {e}")
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -100,13 +107,17 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
 
             return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
         else:
-            logger.info(f"ファイルアップロードに失敗しました: {file_serializer.errors}")
+            django_logger.info(f"ファイルアップロードに失敗しました: {file_serializer.errors}")
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def retrieve(self, request, *args, **kwargs):
+        api_logger.info(f"UploadedFile retrieve request: {request.GET}")
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+
+        response = Response(serializer.data)
+        api_logger.info(f"UploadedFile retrieve response: {response.data}")
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class TranscriptionViewSet(viewsets.ModelViewSet):
     queryset = Transcription.objects.all()
@@ -117,38 +128,49 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         """
         uploadedfileのIDに基づいてtranscriptionのクエリセットをフィルタリングする。
         """
+        api_logger.info(f"TranscriptionViewSet get_queryset request: {self.kwargs}")
         queryset = super().get_queryset().order_by('created_at')
         # URLからuploadedfileのIDを取得するためのキーを修正する
         uploadedfile_id = self.kwargs.get('uploadedfile_id')
         if uploadedfile_id is not None:
             queryset = queryset.filter(uploaded_file__id=uploadedfile_id)
+        api_logger.info(f"TranscriptionViewSet get_queryset response: {queryset}")
         return queryset
 
 class TranscribeView(View):
     def get(self, request, *args, **kwargs):
+        api_logger.info(f"TranscribeView get request: {request.GET}")
         command = TranscribeCommand()
         command.handle()
+        api_logger.info(f"TranscribeView get response: {'status': 'transcription started'}")
         return JsonResponse({'status': 'transcription started'})
 
 # FP16に関するワーニングを無視
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 
 def file_upload_view(request):
+    api_logger.info(f"file_upload_view get request: {request.GET}")
     if request.method == 'POST':
         form = FileUploadForm(request.POST, request.FILES)
         if form.is_valid():
             # ファイルの処理
             handle_uploaded_file(request.FILES['file'])
+            api_logger.info(f"file_upload_view get response: {'status': 'file uploaded'}")
             return render(request, 'transcription/success.html')  # 成功時のテンプレート
     else:
         form = FileUploadForm()
+
+    api_logger.info(f"file_upload_view get response: {'status': 'file uploaded'}")
     return render(request, 'transcription/upload.html', {'form': form})
 
 def handle_uploaded_file(f):
+    api_logger.info(f"handle_uploaded_file get request: {f}")
     # 一時ファイルとして保存
     with open('temp_file', 'wb+') as destination:
         for chunk in f.chunks():
             destination.write(chunk)
+
+    api_logger.info(f"handle_uploaded_file get response: {'status': 'file uploaded'}")
 
 # @shared_task # Celeryを使う場合コメントアウトを外す
 # def transcribe_and_save_async(file_path, uploaded_file_id):
@@ -163,10 +185,9 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     Returns:
         bool: 成功した場合はTrue、失敗した場合はFalse
     """
-    logger = logging.getLogger(__name__)
 
-    logger.debug("文字起こし処理がリクエストされました。")
-    logger.debug(f"ファイルパス: {file_path}")
+    processing_logger.debug("文字起こし処理がリクエストされました。")
+    processing_logger.debug(f"ファイルパス: {file_path}")
 
     # モデルのロード
     try:
@@ -178,7 +199,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         whisper_model = get_whisper_model()
         print(whisper_model)
     except Exception as e:
-        logger.error(f"モデルのロードに失敗しました: {e}")
+        processing_logger.error(f"モデルのロードに失敗しました: {e}")
         return
 
     # 音声ファイルの読み込みと調整
@@ -209,7 +230,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         else:
             raise ValueError("サポートされていない音声形式です。")
     except Exception as e:
-        logger.error(f"ファイルの読み込みに失敗しました: {e}")
+        processing_logger.error(f"ファイルの読み込みに失敗しました: {e}")
         return
 
     # 音声ファイルを指定秒数ごとに分割して文字起こし
@@ -271,12 +292,12 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
                 if serializer_class.is_valid():
                     serializer_class.save()
                 else:
-                    logger.error(f"文字起こし結果の保存に失敗しました: {serializer_class.errors}")
+                    processing_logger.error(f"文字起こし結果の保存に失敗しました: {serializer_class.errors}")
             finally:
                 os.remove(temp_file_path)
         return True
     except Exception as e:
-        logger.error(f"文字起こし処理中にエラーが発生しました: {e}")
+        processing_logger.error(f"文字起こし処理中にエラーが発生しました: {e}")
         return False
 
 @transaction.atomic
@@ -290,8 +311,7 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
     Returns:
         UploadedFile | bool: 成功した場合はUploadedFileのインスタンス、失敗した場合はFalse
     """
-    logger = logging.getLogger(__name__)
-    logger.info(f"summarize_and_save が呼び出されました。uploaded_file_id: {uploaded_file.id}")
+    processing_logger.info(f"summarize_and_save が呼び出されました。uploaded_file_id: {uploaded_file.id}")
 
     try:
         uploaded_file = UploadedFile.objects.select_for_update().get(id=uploaded_file.id)
@@ -306,7 +326,7 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
 
         return uploaded_file
     except Exception as e:
-        logger.error(f"summarize_and_save でエラーが発生しました: {e}")
+        processing_logger.error(f"summarize_and_save でエラーが発生しました: {e}")
         return False
 
 def summarize_text(text: str) -> str:
@@ -329,7 +349,7 @@ def summarize_text(text: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        logging.error(f"テキスト要約中にエラーが発生しました: {e}")
+        processing_logger.error(f"テキスト要約中にエラーが発生しました: {e}")
         return "要約に失敗しました。"
 
 def definition_issue(text: str) -> str:
@@ -352,7 +372,7 @@ def definition_issue(text: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        logging.error(f"テキスト分析中にエラーが発生しました: {e}")
+        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
         return "分析に失敗しました。"
 
 def definition_solution(text: str) -> str:
@@ -375,5 +395,5 @@ def definition_solution(text: str) -> str:
         )
         return response.choices[0].message.content
     except Exception as e:
-        logging.error(f"テキスト分析中にエラーが発生しました: {e}")
+        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
         return "分析に失敗しました。"

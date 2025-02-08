@@ -17,10 +17,13 @@ from .schemas import UserCreate, OrganizationCreate
 import json
 import logging
 from decouple import config
-logger = logging.getLogger('django')
+
+django_logger = logging.getLogger('django')
+api_logger = logging.getLogger('api')
 
 class RegisterView(View):
     def post(self, request):
+        api_logger.info(f"Register request: {request.POST}")
         # バリデーション
         try:
             # リクエストデータを一度だけバリデート
@@ -28,11 +31,15 @@ class RegisterView(View):
             user_data = UserCreate(**data)
             organization_data = OrganizationCreate(**data)
         except ValueError as e:
-            return JsonResponse({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            response = {'message': str(e)}
+            api_logger.error(response)
+            return JsonResponse(response, status=status.HTTP_400_BAD_REQUEST)
 
         # メールアドレスの重複チェック
         if User.objects.filter(email=user_data.email).exists():
-            return JsonResponse({'message': 'メールアドレスが既に存在します'}, status=status.HTTP_400_BAD_REQUEST)
+            response = {'message': 'メールアドレスが既に存在します'}
+            api_logger.error(response)
+            return JsonResponse(response, status=status.HTTP_400_BAD_REQUEST)
 
         # 組織を作成
         # トランザクション
@@ -53,15 +60,14 @@ class RegisterView(View):
 
             except Exception as e:
                 transaction.rollback()
-                logger.info('ユーザーが作成できませんでした')
-                logger.info(e)
-                return JsonResponse({'message': 'ユーザーが作成できませんでした'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                response = {'message': 'ユーザーが作成できませんでした'}
+                api_logger.error(response)
+                return JsonResponse(response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         response =  {
-            'organization' : organization.id,
-            'user' : user.id,
             'message' : 'メール認証リンクを送信しました。',
         }
+        api_logger.info(response)
         return JsonResponse(response, status=status.HTTP_201_CREATED)
 
     def send_verification_email(self, user):
@@ -90,6 +96,7 @@ class RegisterView(View):
 
 class LoginView(View):
     def post(self, request):
+        api_logger.info(f"Login request: {request.POST}")
         email = request.POST.get('email')
         password = request.POST.get('password')
 
@@ -102,12 +109,16 @@ class LoginView(View):
 
             organization = Organization.objects.get(id=user.organization_id)
 
-            return JsonResponse({
+            response = {
                 'organization_id': organization.id,
                 'access_token': user.auth_token.key,  # トークンを取得
                 'token_type': 'Bearer',
-            })
-        return JsonResponse({'message': 'ログイン情報が正しくありません'}, status=401)
+            }
+            api_logger.info(response)
+            return JsonResponse(response, status=status.HTTP_200_OK)
+        response = {'message': 'ログイン情報が正しくありません'}
+        api_logger.error(response)
+        return JsonResponse(response, status=status.HTTP_401_UNAUTHORIZED)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
