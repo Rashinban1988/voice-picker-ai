@@ -50,7 +50,7 @@ def get_whisper_model():
     # CPUを使用するように設定
     device = torch.device("cpu")
 
-    whisper_model = whisper.load_model("tiny").to(device)
+    whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
 
@@ -305,7 +305,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
             # 文字起こし結果を保存
             serializer_class = TranscriptionSerializer(data={
-                "start_time": start / 1000,
+                "start_time": int(start / 1000),
                 "text": transcription_text,
                 "uploaded_file": uploaded_file_id,
                 "speaker": speaker_name,  # 話者名を追加
