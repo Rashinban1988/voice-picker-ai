@@ -279,7 +279,7 @@ def extract_speakers(dz):
 def create_audio_segments(audio, dzList, file_path):
     """
     音声ファイルをセグメントに分割する。
-    同じ話者の音声は20秒まで同じセグメントにまとめる。
+    同じ話者の音声は30秒まで同じセグメントにまとめる。
     """
     spacer_milli = 500
     spacer = AudioSegment.silent(duration=spacer_milli)
@@ -288,7 +288,7 @@ def create_audio_segments(audio, dzList, file_path):
 
     current_speaker = None
     current_segment = AudioSegment.silent(duration=0)
-    max_segment_duration = 20 * 1000
+    max_segment_duration = 30 * 1000
     for l in dzList:
         start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
         start = int(millisec(start))
