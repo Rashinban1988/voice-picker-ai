@@ -5,6 +5,7 @@ FROM python:3.10
 RUN apt-get update && apt-get install -y \
     vim \
     curl \
+    cron \
     ffmpeg \
     libssl-dev \
     libffi-dev \
@@ -26,8 +27,15 @@ COPY requirements.txt /code/
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
+# cronをインストールして、cronjobを設定
+RUN apt-get install -y cron
+COPY cronjob /etc/cron.d/transcribe-cron
+RUN chmod 0644 /etc/cron.d/transcribe-cron && \
+    crontab /etc/cron.d/transcribe-cron && \
+    touch /var/log/cron.log
+
 # プロジェクトのファイルをコンテナにコピー
 COPY . /code/
 
 # アプリケーションを起動するコマンド
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000", "--noreload"]
+CMD ["sh", "-c", "cron -f & python manage.py runserver 0.0.0.0:8000 --noreload"]
