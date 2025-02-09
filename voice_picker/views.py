@@ -304,7 +304,8 @@ def create_audio_segments(audio, dzList, file_path):
     current_speaker = None
     current_segment = AudioSegment.silent(duration=0)
     max_segment_duration = 30 * 1000  # セグメントの最大長
-    segment_start_time = None # セグメントの開始時間を初期化
+
+    segment_start_time = 0
 
     for l in dzList:
         if isinstance(l, list) and len(l) == 3:
