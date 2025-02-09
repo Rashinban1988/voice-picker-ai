@@ -399,7 +399,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         return True
     except Exception as e:
-        processing_logger.error(f"エラーが発生しました: {e}")
+        processing_logger.error(f"エラーが発生しました: {e} line: {traceback.format_exc()}")
         return False
 
 @transaction.atomic
