@@ -428,7 +428,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         for i, (start, end, speaker) in enumerate(dzList):
             temp_file_path, segment_start_time = export_segment(sounds, segments, i, segment_start_time) # セグメントをエクスポートする
             transcription_text, segment_start_time = transcribe_segment(whisper_model, temp_file_path, segment_start_time) # セグメントを文字起こしする
-            save_transcription(transcription_text, start, uploaded_file_id, speaker) # 結果を保存する
+            save_transcription(transcription_text, start, uploaded_file_id, speaker, segment_start_time) # 結果を保存する
             os.remove(temp_file_path)  # 一時ファイルを削除
 
         return True
