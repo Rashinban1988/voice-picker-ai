@@ -420,7 +420,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         dzList = extract_speakers(dz) # 話者を抽出する
 
-        sounds, segments, segment_start_timeq = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
+        sounds, segments, segment_start_time = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
 
         whisper_model = get_whisper_model()
 
