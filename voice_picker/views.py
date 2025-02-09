@@ -288,12 +288,10 @@ def create_audio_segments(audio, dzList, file_path):
 
     current_speaker = None
     current_segment = AudioSegment.silent(duration=0)
-    max_segment_duration = 30 * 1000
-    for l in dzList:
-        # デバッグ用のログ
-        processing_logger.info(f"Processing line: {l}")  # 各行の内容を出力
+    max_segment_duration = 30 * 1000  # セグメントの最大長
+    segment_start_time = None # セグメントの開始時間を初期化
 
-        # lがリストであることを確認し、要素を取得
+    for l in dzList:
         if isinstance(l, list) and len(l) == 3:
             start, end, speaker = l  # リストからstart, end, speakerを取得
         else:
@@ -308,6 +306,13 @@ def create_audio_segments(audio, dzList, file_path):
             # セグメントをsoundsに追加
             sounds = sounds.append(current_segment, crossfade=0)
             segments.append(len(sounds))  # 現在のsoundsの長さを記録
+
+            # セグメントの開始時間を記録
+            if segment_start_time is None:
+                segment_start_time = start  # 最初のセグメントの開始時間を設定
+            else:
+                segment_start_time = min(segment_start_time, start)  # 最小のstart時間を保持
+
             sounds = sounds.append(spacer, crossfade=0)  # スペーサーを追加
             current_segment = AudioSegment.silent(duration=0)  # 現在のセグメントをリセット
 
@@ -317,21 +322,28 @@ def create_audio_segments(audio, dzList, file_path):
     if len(current_segment) > 0:
         sounds = sounds.append(current_segment, crossfade=0)
         segments.append(len(sounds))
+
+        # 最後のセグメントの開始時間を記録
+        if segment_start_time is None:
+            segment_start_time = start  # 最初のセグメントの開始時間を設定
+        else:
+            segment_start_time = min(segment_start_time, start)  # 最小のstart時間を保持
+
         sounds = sounds.append(spacer, crossfade=0)
 
     sounds.export(file_path, format="wav")
-    return sounds, segments
+    return sounds, segments, segment_start_time
 
-def export_segment(sounds, segments, i):
+def export_segment(sounds, segments, i, segment_start_time):
     """
     セグメントをエクスポートする。
     """
     segment_audio = sounds[segments[i]:segments[i + 1]]
     temp_file_path = f"temp_segment_{i}.wav"
     segment_audio.export(temp_file_path, format="wav")
-    return temp_file_path
+    return temp_file_path, segment_start_time
 
-def transcribe_segment(whisper_model, temp_file_path):
+def transcribe_segment(whisper_model, temp_file_path, segment_start_time):
     """
     セグメントを文字起こしする。
     """
@@ -339,17 +351,16 @@ def transcribe_segment(whisper_model, temp_file_path):
         result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
         transcription_text = result.get("text", "")
         processing_logger.info(f"transcription_text: {transcription_text}")
-    return transcription_text
+    return transcription_text, segment_start_time
 
-def save_transcription(transcription_text, start, uploaded_file_id, speaker):
+def save_transcription(transcription_text, start, uploaded_file_id, speaker, segment_start_time):
     """
     文字起こし結果を保存する。
     """
-    start_time = int(start / 1000)
-    processing_logger.info(f"Saving transcription: start_time={start_time}, text={transcription_text}, speaker={speaker}")
+    processing_logger.info(f"Saving transcription: start_time={segment_start_time}, text={transcription_text}, speaker={speaker}")
 
     serializer_class = TranscriptionSerializer(data={
-        "start_time": start_time,
+        "start_time": segment_start_time,
         "text": transcription_text,
         "uploaded_file": uploaded_file_id,
         "speaker": speaker,
@@ -393,14 +404,14 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         dzList = extract_speakers(dz) # 話者を抽出する
 
-        sounds, segments = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
+        sounds, segments, segment_start_timeq = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
 
         whisper_model = get_whisper_model()
 
         # 各話者のセグメントに対して文字起こしを行う
         for i, (start, end, speaker) in enumerate(dzList):
-            temp_file_path = export_segment(sounds, segments, i) # セグメントをエクスポートする
-            transcription_text = transcribe_segment(whisper_model, temp_file_path) # セグメントを文字起こしする
+            temp_file_path, segment_start_time = export_segment(sounds, segments, i, segment_start_time) # セグメントをエクスポートする
+            transcription_text, segment_start_time = transcribe_segment(whisper_model, temp_file_path, segment_start_time) # セグメントを文字起こしする
             save_transcription(transcription_text, start, uploaded_file_id, speaker) # 結果を保存する
             os.remove(temp_file_path)  # 一時ファイルを削除
 
