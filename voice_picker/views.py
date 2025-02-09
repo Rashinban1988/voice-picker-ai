@@ -188,12 +188,6 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
-    # 室内音声のノイズ除去
-    audio = audio.low_pass_filter(1000)
-    audio = audio.high_pass_filter(1000)
-    audio = audio.low_shelf(0, 1000)
-    audio = audio.high_shelf(0, 1000)
-
     # 音声の正規化
     audio = audio.normalize()
 
