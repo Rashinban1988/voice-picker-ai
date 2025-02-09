@@ -29,6 +29,7 @@ import whisper
 from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
 from pyannote.audio import Pipeline
+from pyannote.audio import Audio
 
 # 環境変数をロードする
 load_dotenv()
@@ -432,9 +433,6 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     """
 
     try:
-        t1 = 0 * 1000  # Works in milliseconds
-        t2 = 20 * 60 * 1000
-
         # ファイルのパスを取得
         file_path = UploadedFile.objects.get(id=uploaded_file_id).file.path
         file_extension = os.path.splitext(file_path)[1]
@@ -442,25 +440,15 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         if file_extension != ".wav":
             file_path, file_extension = process_audio(file_path, file_extension)
 
-        audio = AudioSegment.from_wav(file_path)
-        audio = preprocess_audio(audio, t1, t2, file_path)  # 音声の前処理を関数化
-
-        # ダイアライゼーション
-        dz = perform_diarization(file_path) # ダイアライゼーションを行う
-        save_diarization_output(dz) # 出力を保存する
-
-        dzList = extract_speakers(dz) # 話者を抽出する
-
-        sounds, segments = create_audio_segments(audio, dzList, file_path) # 音声セグメントを作成する
+        diarization = perform_diarization(file_path)
+        audio = Audio(file_path)
 
         whisper_model = get_whisper_model()
 
-        # 各話者のセグメントに対して文字起こしを行う
-        for i, (start, speaker) in enumerate(segments):
-            temp_file_path = export_segment(sounds, segments, i) # セグメントをエクスポートする
-            transcription_text = transcribe_segment(whisper_model, temp_file_path) # セグメントを文字起こしする
-            save_transcription(transcription_text, start, uploaded_file_id, speaker) # 結果を保存する
-            os.remove(temp_file_path)  # 一時ファイルを削除
+        for segment, _, speaker in diarization.itertracks(yield_label=True):
+            waveform, sample_rate = audio.crop(file_path, segment)
+            text = whisper_model.transcribe(waveform.squeeze().numpy())["text"]
+            save_transcription(text, segment.start, uploaded_file_id, speaker)
 
         return True
     except Exception as e:
