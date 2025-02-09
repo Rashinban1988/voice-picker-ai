@@ -290,9 +290,13 @@ def create_audio_segments(audio, dzList, file_path):
     current_segment = AudioSegment.silent(duration=0)
     max_segment_duration = 30 * 1000
     for l in dzList:
-        start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
-        start = int(millisec(start))
-        end = int(millisec(end))
+        # デバッグ用のログ
+        processing_logger.info(f"Processing line: {l}")  # 各行の内容を出力
+
+        # 正規表現を使用する前に、lが文字列であることを確認
+        if not isinstance(l, str):
+            processing_logger.error(f"Invalid type for line: {type(l)}. Expected string.")
+            continue  # 次のループに進む
 
         # 話者を取得
         speaker = re.findall(r'SPEAKER_\d+', l)[0] if re.findall(r'SPEAKER_\d+', l) else None
