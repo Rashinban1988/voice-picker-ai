@@ -190,7 +190,22 @@ def process_audio(file_path, file_extension):
 
     # ノイズ除去
     samples = np.array(audio.get_array_of_samples())
-    reduced_noise = nr.reduce_noise(y=samples, sr=audio.frame_rate)
+    reduced_noise = nr.reduce_noise(
+        y=samples, # 音声データ
+        sr=audio.frame_rate, # サンプリングレート
+        prop_decrease=0.5, # ノイズを減少させる割合、1だと音声も減少する可能性がある
+        time_constant_s=2, # 室内など一定のノイズの場合は大きいほどノイズが減少する、屋外などノイズが変動する場合は小さいほどノイズが減少する
+        freq_mask_smooth_hz=400, # 音声に影響が出ないのは500Hz以下
+        time_mask_smooth_ms=50, # 短い音声では50ms以下、長い音声では100ms以上
+        thresh_n_mult_nonstationary=1.5, # 屋外などノイズが変動する場合は大きいほどノイズが減少する、室内のおすすめは1.5
+        sigmoid_slope_nonstationary=10, # 非定常ノイズのシグモイドの傾き、音声の場合は10以上
+        n_std_thresh_stationary=1.5, # 定常ノイズの標準偏差の閾値、大きいほどノイズが減少する、音声の場合は1.5
+        clip_noise_stationary=False, # 定常ノイズをクリップするかどうか、Trueだと音声も減少する可能性がある
+        use_tqdm=False, # 進捗バーを表示するかどうか、処理速度に影響する
+        n_jobs=2, # 並列処理の数、1だとシリアル処理
+        use_torch=False, # テンソルを使用するかどうか、Trueだと処理速度が速い（GPUを使用する場合はTrue）
+        device="cpu" # デバイスを指定、GPUを使用する場合は"cuda"、CPUを使用する場合は"cpu"
+    )
     audio = AudioSegment(
         reduced_noise.tobytes(),
         frame_rate=audio.frame_rate,
