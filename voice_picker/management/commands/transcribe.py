@@ -34,13 +34,13 @@ class Command(BaseCommand):
                     uploaded_file.save()
                     continue
 
-                uploaded_file = text_generation_save(uploaded_file)
-                logger.info(f"text_generation_saveの戻り値: {uploaded_file}")
-                if not isinstance(uploaded_file, UploadedFile):
-                    uploaded_file.status = Status.ERROR
-                    uploaded_file.save()
-                    logger.error("text_generation_saveが無効な戻り値を返しました。")
-                    continue
+                # uploaded_file = text_generation_save(uploaded_file)
+                # logger.info(f"text_generation_saveの戻り値: {uploaded_file}")
+                # if not isinstance(uploaded_file, UploadedFile):
+                #     uploaded_file.status = Status.ERROR
+                #     uploaded_file.save()
+                #     logger.error("text_generation_saveが無効な戻り値を返しました。")
+                #     continue
 
                 uploaded_file.status = Status.PROCESSED
                 uploaded_file.save()

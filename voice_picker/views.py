@@ -335,14 +335,18 @@ def transcribe_segment(whisper_model, temp_file_path):
     with torch.no_grad():
         result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
         transcription_text = result.get("text", "")
+        processing_logger.info(f"transcription_text: {transcription_text}")
     return transcription_text
 
 def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     """
     文字起こし結果を保存する。
     """
+    start_time = int(start / 1000)
+    processing_logger.info(f"Saving transcription: start_time={start_time}, text={transcription_text}, speaker={speaker}")
+
     serializer_class = TranscriptionSerializer(data={
-        "start_time": int(start / 1000),
+        "start_time": start_time,
         "text": transcription_text,
         "uploaded_file": uploaded_file_id,
         "speaker": speaker,
