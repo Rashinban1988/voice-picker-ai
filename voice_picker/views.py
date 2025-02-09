@@ -188,33 +188,42 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
-    # ノイズ除去
-    samples = np.array(audio.get_array_of_samples())
-    reduced_noise = nr.reduce_noise(
-        y=samples, # 音声データ
-        sr=audio.frame_rate, # サンプリングレート
-        prop_decrease=0.5, # ノイズを減少させる割合、1だと音声も減少する可能性がある
-        time_constant_s=2, # 室内など一定のノイズの場合は大きいほどノイズが減少する、屋外などノイズが変動する場合は小さいほどノイズが減少する
-        freq_mask_smooth_hz=400, # 音声に影響が出ないのは500Hz以下
-        time_mask_smooth_ms=50, # 短い音声では50ms以下、長い音声では100ms以上
-        thresh_n_mult_nonstationary=1.5, # 屋外などノイズが変動する場合は大きいほどノイズが減少する、室内のおすすめは1.5
-        sigmoid_slope_nonstationary=10, # 非定常ノイズのシグモイドの傾き、音声の場合は10以上
-        n_std_thresh_stationary=1.5, # 定常ノイズの標準偏差の閾値、大きいほどノイズが減少する、音声の場合は1.5
-        clip_noise_stationary=False, # 定常ノイズをクリップするかどうか、Trueだと音声も減少する可能性がある
-        use_tqdm=False, # 進捗バーを表示するかどうか、処理速度に影響する
-        n_jobs=2, # 並列処理の数、1だとシリアル処理
-        use_torch=False, # テンソルを使用するかどうか、Trueだと処理速度が速い（GPUを使用する場合はTrue）
-        device="cpu" # デバイスを指定、GPUを使用する場合は"cuda"、CPUを使用する場合は"cpu"
-    )
-    audio = AudioSegment(
-        reduced_noise.tobytes(),
-        frame_rate=audio.frame_rate,
-        sample_width=audio.sample_width,
-        channels=audio.channels
-    )
+    # 室内音声のノイズ除去
+    audio = audio.low_pass_filter(1000)
+    audio = audio.high_pass_filter(1000)
+    audio = audio.low_shelf(0, 1000)
+    audio = audio.high_shelf(0, 1000)
 
     # 音声の正規化
     audio = audio.normalize()
+
+    # # ノイズ除去
+    # samples = np.array(audio.get_array_of_samples())
+    # reduced_noise = nr.reduce_noise(
+    #     y=samples, # 音声データ
+    #     sr=audio.frame_rate, # サンプリングレート
+    #     prop_decrease=0.5, # ノイズを減少させる割合、1だと音声も減少する可能性がある
+    #     time_constant_s=2, # 室内など一定のノイズの場合は大きいほどノイズが減少する、屋外などノイズが変動する場合は小さいほどノイズが減少する
+    #     freq_mask_smooth_hz=400, # 音声に影響が出ないのは500Hz以下
+    #     time_mask_smooth_ms=50, # 短い音声では50ms以下、長い音声では100ms以上
+    #     thresh_n_mult_nonstationary=1.5, # 屋外などノイズが変動する場合は大きいほどノイズが減少する、室内のおすすめは1.5
+    #     sigmoid_slope_nonstationary=10, # 非定常ノイズのシグモイドの傾き、音声の場合は10以上
+    #     n_std_thresh_stationary=1.5, # 定常ノイズの標準偏差の閾値、大きいほどノイズが減少する、音声の場合は1.5
+    #     clip_noise_stationary=False, # 定常ノイズをクリップするかどうか、Trueだと音声も減少する可能性がある
+    #     use_tqdm=False, # 進捗バーを表示するかどうか、処理速度に影響する
+    #     n_jobs=2, # 並列処理の数、1だとシリアル処理
+    #     use_torch=False, # テンソルを使用するかどうか、Trueだと処理速度が速い（GPUを使用する場合はTrue）
+    #     device="cpu" # デバイスを指定、GPUを使用する場合は"cuda"、CPUを使用する場合は"cpu"
+    # )
+    # audio = AudioSegment(
+    #     reduced_noise.tobytes(),
+    #     frame_rate=audio.frame_rate,
+    #     sample_width=audio.sample_width,
+    #     channels=audio.channels
+    # )
+
+    # 音声の正規化
+    # audio = audio.normalize()
 
     # 新しいファイル名を作成
     new_file_path = file_path.rsplit(".", 1)[0] + ".wav"
@@ -301,6 +310,11 @@ def extract_speakers(dz):
         processing_logger.info(f"dzList: {dzList}")
     return dzList
 
+def format_time(milliseconds):
+    seconds = (milliseconds // 1000) % 60
+    minutes = (milliseconds // 1000) // 60
+    return f"{minutes:02}:{seconds:02}"  # MM:SS形式で返す
+
 def create_audio_segments(audio, dzList, file_path):
     """
     音声ファイルをセグメントに分割する。
@@ -313,7 +327,7 @@ def create_audio_segments(audio, dzList, file_path):
     current_speaker = None
     add_segments = AudioSegment.silent(duration=0)
     max_segment_duration = 30 * 1000  # セグメントの最大長
-    segment_start_time = 0
+    segment_start_time = format_time(0)
     total_segment_duration = 0
     for l in dzList:
         if isinstance(l, list) and len(l) == 3:
@@ -321,6 +335,9 @@ def create_audio_segments(audio, dzList, file_path):
             processing_logger.info(f"start: {start}")
             processing_logger.info(f"end: {end}")
             processing_logger.info(f"speaker: {speaker}")
+            # 2025-02-09 17:36:16 INFO [processing] [views.py:321] - start: 594
+            # 2025-02-09 17:36:16 INFO [processing] [views.py:322] - end: 4137
+            # 2025-02-09 17:36:16 INFO [processing] [views.py:323] - speaker: SPEAKER_04
         else:
             processing_logger.error(f"Invalid type for line: {type(l)}. Expected list with 3 elements.")
             continue  # 次のループに進む
@@ -332,6 +349,12 @@ def create_audio_segments(audio, dzList, file_path):
         processing_logger.info(f"speaker: {speaker}")
         processing_logger.info(f"current_speaker: {current_speaker}")
         processing_logger.info(f"segment_start_time: {segment_start_time}")
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:329] - total_segment_duration: 7086
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:330] - end - start: 304
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:331] - max_segment_duration: 30000
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:332] - speaker: SPEAKER_02
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:333] - current_speaker: SPEAKER_04
+        # 2025-02-09 17:36:16 INFO [processing] [views.py:334] - segment_start_time: 594
         if total_segment_duration + (end - start) >= max_segment_duration or speaker != current_speaker:
             sounds = sounds.append(add_segments, crossfade=0)
             segments.append((segment_start_time, speaker))  # 現在のsoundsの長さを記録
@@ -340,7 +363,7 @@ def create_audio_segments(audio, dzList, file_path):
             init_segments = AudioSegment.silent(duration=0)
             add_segments = init_segments
             current_speaker = speaker # 現在の話者を更新
-            segment_start_time = start # セグメントの開始時間を記録
+            segment_start_time = format_time(start) # セグメントの開始時間を記録
             total_segment_duration = end - start # セグメントの総長を記録
         else:
             add_segments = add_segments.append(audio[start:end], crossfade=0)
@@ -360,7 +383,13 @@ def export_segment(sounds, segments, i):
     """
     セグメントをエクスポートする。
     """
-    segment_audio = sounds[segments[i][0]:segments[i + 1][0]]
+    start = millisec(segments[i][0])
+    # セグメントの終了時間を設定
+    if i + 1 < len(segments):
+        end = millisec(segments[i + 1][0])  # 次のセグメントの開始時間をミリ秒に変換
+    else:
+        end = len(sounds)  # segmentsがない場合は音声の最後まで
+    segment_audio = sounds[start:end]
     temp_file_path = f"temp_segment_{i}.wav"
     segment_audio.export(temp_file_path, format="wav")
     return temp_file_path
