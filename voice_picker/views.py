@@ -310,10 +310,12 @@ def extract_speakers(dz):
         processing_logger.info(f"dzList: {dzList}")
     return dzList
 
-def format_time(milliseconds):
-    seconds = (milliseconds // 1000) % 60
-    minutes = (milliseconds // 1000) // 60
-    return f"{minutes:02}:{seconds:02}"  # MM:SS形式で返す
+def millisec_to_sec(milliseconds):
+    """
+    ミリ秒を秒数に変換する。
+    """
+    seconds = milliseconds // 1000  # ミリ秒を秒に変換
+    return seconds  # 秒数を返す
 
 def create_audio_segments(audio, dzList, file_path):
     """
@@ -327,7 +329,7 @@ def create_audio_segments(audio, dzList, file_path):
     current_speaker = None
     add_segments = AudioSegment.silent(duration=0)
     max_segment_duration = 30 * 1000  # セグメントの最大長
-    segment_start_time = format_time(0)
+    segment_start_time = 0
     total_segment_duration = 0
     for l in dzList:
         if isinstance(l, list) and len(l) == 3:
@@ -363,7 +365,7 @@ def create_audio_segments(audio, dzList, file_path):
             init_segments = AudioSegment.silent(duration=0)
             add_segments = init_segments
             current_speaker = speaker # 現在の話者を更新
-            segment_start_time = format_time(start) # セグメントの開始時間を記録
+            segment_start_time = start # セグメントの開始時間を記録
             total_segment_duration = end - start # セグメントの総長を記録
         else:
             add_segments = add_segments.append(audio[start:end], crossfade=0)
@@ -383,10 +385,10 @@ def export_segment(sounds, segments, i):
     """
     セグメントをエクスポートする。
     """
-    start = millisec(segments[i][0])
+    start = segments[i][0]
     # セグメントの終了時間を設定
     if i + 1 < len(segments):
-        end = millisec(segments[i + 1][0])  # 次のセグメントの開始時間をミリ秒に変換
+        end = segments[i + 1][0]
     else:
         end = len(sounds)  # segmentsがない場合は音声の最後まで
     segment_audio = sounds[start:end]
@@ -411,7 +413,7 @@ def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     processing_logger.info(f"Saving transcription: start_time={start}, text={transcription_text}, speaker={speaker}")
 
     serializer_class = TranscriptionSerializer(data={
-        "start_time": start,
+        "start_time": millisec_to_sec(start),
         "text": transcription_text,
         "uploaded_file": uploaded_file_id,
         "speaker": speaker,
