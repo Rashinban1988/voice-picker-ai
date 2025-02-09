@@ -446,9 +446,15 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         whisper_model = get_whisper_model()
 
         for segment, _, speaker in diarization.itertracks(yield_label=True):
+            # segmentの型を確認し、必要に応じて変換
+            if isinstance(segment.start, str):
+                segment_start = float(segment.start)  # 文字列を浮動小数点数に変換
+            else:
+                segment_start = segment.start
             waveform, sample_rate = audio.crop(file_path, segment)
             text = whisper_model.transcribe(waveform.squeeze().numpy())["text"]
-            save_transcription(text, segment.start, uploaded_file_id, speaker)
+            start_sec = millisec_to_sec(segment_start)
+            save_transcription(text, start_sec, uploaded_file_id, speaker)
 
         return True
     except Exception as e:
