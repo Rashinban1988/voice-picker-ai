@@ -293,17 +293,12 @@ def create_audio_segments(audio, dzList, file_path):
         # デバッグ用のログ
         processing_logger.info(f"Processing line: {l}")  # 各行の内容を出力
 
-        # 正規表現を使用する前に、lが文字列であることを確認
-        if not isinstance(l, str):
-            processing_logger.error(f"Invalid type for line: {type(l)}. Expected string.")
+        # lがリストであることを確認し、要素を取得
+        if isinstance(l, list) and len(l) == 3:
+            start, end, speaker = l  # リストからstart, end, speakerを取得
+        else:
+            processing_logger.error(f"Invalid type for line: {type(l)}. Expected list with 3 elements.")
             continue  # 次のループに進む
-
-        start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=l))
-        start = int(millisec(start))
-        end = int(millisec(end))
-
-        # 話者を取得
-        speaker = re.findall(r'SPEAKER_\d+', l)[0] if re.findall(r'SPEAKER_\d+', l) else None
 
         # 現在のセグメントに音声を追加
         current_segment = current_segment.append(audio[start:end], crossfade=0)
