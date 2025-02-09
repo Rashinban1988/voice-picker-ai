@@ -447,13 +447,26 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         for segment, _, speaker in diarization.itertracks(yield_label=True):
             # segmentの型を確認し、必要に応じて変換
-            if isinstance(segment.start, str):
-                segment_start = float(segment.start)  # 文字列を浮動小数点数に変換
-            else:
-                segment_start = segment.start
+            segment_start = segment.start
+            segment_end = segment.end
+
+            if isinstance(segment_start, str):
+                segment_start = float(segment_start)
+            if isinstance(segment_end, str):
+                segment_end = float(segment_end)
+
+            # デバッグ用のログを追加
+            processing_logger.info(f"Processing segment: start={segment_start}, end={segment_end}")
+
+            # audio.cropの呼び出し
             waveform, sample_rate = audio.crop(file_path, segment)
+            processing_logger.info(f"Waveform shape: {waveform.shape}, Sample rate: {sample_rate}")
+
+            # whisper_model.transcribeの呼び出し
             text = whisper_model.transcribe(waveform.squeeze().numpy())["text"]
+            processing_logger.info(f"Transcribed text: {text}")
             start_sec = millisec_to_sec(segment_start)
+
             save_transcription(text, start_sec, uploaded_file_id, speaker)
 
         return True
