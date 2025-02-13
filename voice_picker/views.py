@@ -29,7 +29,7 @@ import whisper
 from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
 from pyannote.audio import Pipeline
-from pyannote.audio import Audio, Segment
+from pyannote.audio import Audio
 
 # 環境変数をロードする
 load_dotenv()
