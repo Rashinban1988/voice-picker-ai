@@ -447,7 +447,14 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         for segment, _, speaker in diarization.itertracks(yield_label=True):
             waveform, sample_rate = audio.crop(file_path, segment)
-            text = whisper_model.transcribe(waveform.squeeze().numpy())["text"]
+            result = whisper_model.transcribe(waveform.squeeze().numpy())
+
+            # resultがリストである場合、最初の要素を取得
+            if isinstance(result, list) and len(result) > 0:
+                text = result[0].get("text", "")
+            else:
+                text = ""  # デフォルト値を設定
+
             print(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {text}")
 
             start_sec = millisec_to_sec(segment.start)
