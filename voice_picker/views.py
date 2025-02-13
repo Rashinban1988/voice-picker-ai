@@ -449,13 +449,17 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             waveform, sample_rate = audio.crop(file_path, segment)
             result = whisper_model.transcribe(waveform.squeeze().numpy())
 
+            processing_logger.info(f"result: {result}")
+
             # resultがリストである場合、最初の要素を取得
             if isinstance(result, list) and len(result) > 0:
+                processing_logger.info(f"result[0]: {result[0]}")
                 text = result[0].get("text", "")
             else:
+                processing_logger.info(f"result is not list or empty")
                 text = ""  # デフォルト値を設定
 
-            print(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {text}")
+            processing_logger.info(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {text}")
 
             start_sec = millisec_to_sec(segment.start)
 
