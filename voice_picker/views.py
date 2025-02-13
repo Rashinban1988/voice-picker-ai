@@ -51,7 +51,7 @@ def get_whisper_model():
     # CPUを使用するように設定
     device = torch.device("cpu")
 
-    whisper_model = whisper.load_model("tiny").to(device)
+    whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
 
@@ -459,6 +459,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             processing_logger.info(f"Processing segment: start={segment_start}, end={segment_end}")
 
             # audio.cropの呼び出し
+            segment = (segment_start, segment_end)
             waveform, sample_rate = audio.crop(file_path, segment)
             processing_logger.info(f"Waveform shape: {waveform.shape}, Sample rate: {sample_rate}")
 
