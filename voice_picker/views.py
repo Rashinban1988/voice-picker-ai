@@ -459,7 +459,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             processing_logger.info(f"Processing segment: start={segment_start}, end={segment_end}")
 
             # audio.cropの呼び出し
-            segment = (segment_start, segment_end)
+            segment = {'start': segment_start, 'end': segment_end}
             waveform, sample_rate = audio.crop(file_path, segment)
             processing_logger.info(f"Waveform shape: {waveform.shape}, Sample rate: {sample_rate}")
 
