@@ -442,7 +442,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
 
         whisper_model = get_whisper_model()
 
-        diarization = pipeline(file_path)
+        diarization = perform_diarization(file_path)
         audio = Audio(sample_rate=16000, mono=True)
 
         for segment, _, speaker in diarization.itertracks(yield_label=True):
