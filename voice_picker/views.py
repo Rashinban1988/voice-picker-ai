@@ -29,7 +29,7 @@ import whisper
 from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
 from pyannote.audio import Pipeline
-from pyannote.audio import Audio
+from pyannote.audio import Audio, Segment
 
 # 環境変数をロードする
 load_dotenv()
@@ -440,33 +440,17 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         if file_extension != ".wav":
             file_path, file_extension = process_audio(file_path, file_extension)
 
-        diarization = perform_diarization(file_path)
-        audio = Audio(file_path)
-
         whisper_model = get_whisper_model()
 
+        diarization = pipeline(file_path)
+        audio = Audio(sample_rate=16000, mono=True)
+
         for segment, _, speaker in diarization.itertracks(yield_label=True):
-            # segmentの型を確認し、必要に応じて変換
-            segment_start = segment.start
-            segment_end = segment.end
-
-            if isinstance(segment_start, str):
-                segment_start = float(segment_start)
-            if isinstance(segment_end, str):
-                segment_end = float(segment_end)
-
-            # デバッグ用のログを追加
-            processing_logger.info(f"Processing segment: start={segment_start}, end={segment_end}")
-
-            # audio.cropの呼び出し
-            segment = {'start': segment_start, 'end': segment_end}
             waveform, sample_rate = audio.crop(file_path, segment)
-            processing_logger.info(f"Waveform shape: {waveform.shape}, Sample rate: {sample_rate}")
-
-            # whisper_model.transcribeの呼び出し
             text = whisper_model.transcribe(waveform.squeeze().numpy())["text"]
-            processing_logger.info(f"Transcribed text: {text}")
-            start_sec = millisec_to_sec(segment_start)
+            print(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {text}")
+
+            start_sec = millisec_to_sec(segment.start)
 
             save_transcription(text, start_sec, uploaded_file_id, speaker)
 
