@@ -30,6 +30,8 @@ from .models import Transcription, UploadedFile
 from .serializers import TranscriptionSerializer, UploadedFileSerializer
 from pyannote.audio import Pipeline
 from pyannote.audio import Audio
+import torchaudio
+from pyannote.audio.pipelines.utils.hook import ProgressHook
 
 # 環境変数をロードする
 load_dotenv()
@@ -190,7 +192,7 @@ def process_audio(file_path, file_extension):
     processing_logger.info(f"audio: {audio}")
 
     # 音声の正規化
-    audio = audio.normalize()
+    # audio = audio.normalize()
 
     # # ノイズ除去
     # samples = np.array(audio.get_array_of_samples())
@@ -233,7 +235,7 @@ def process_audio(file_path, file_extension):
     if not os.path.exists(new_file_path):
         raise FileNotFoundError(f"エクスポートされたファイルが見つかりません: {new_file_path}")
 
-    return new_file_path, ".wav"
+    return new_file_path
 
 def millisec(timeStr):
     """
@@ -266,7 +268,15 @@ def perform_diarization(file_path):
     音声ファイルをダイアライゼーション（話者分離）する。
     """
     pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
-    return pipeline(file_path)
+
+    # オーディオ ファイルをメモリに事前にロードすると、処理が高速化される可能性があります。
+    waveform, sample_rate = torchaudio.load(file_path)
+
+    # パイプラインの進行状況を監視
+    with ProgressHook() as hook:
+        diarization = pipeline({"waveform": waveform, "sample_rate": sample_rate}, hook=hook)
+
+    return diarization
 
 def save_diarization_output(dz):
     """
@@ -443,6 +453,8 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         whisper_model = get_whisper_model()
 
         diarization = perform_diarization(file_path)
+        with open("audio.rttm", "w") as rttm:
+            diarization.write_rttm(rttm)
         audio = Audio(sample_rate=16000, mono=True)
 
         for segment, _, speaker in diarization.itertracks(yield_label=True):
