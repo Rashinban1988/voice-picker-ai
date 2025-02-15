@@ -191,6 +191,9 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
+    # testのために音声を30秒に切り取る
+    audio = audio[:30 * 1000]
+
     # 音声の正規化
     # audio = audio.normalize()
 
