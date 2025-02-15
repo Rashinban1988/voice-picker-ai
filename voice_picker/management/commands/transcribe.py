@@ -42,7 +42,7 @@ class Command(BaseCommand):
                 for segment, _, speaker in diarization.itertracks(yield_label=True):
                     waveform, sample_rate = audio.crop(file_path, segment)
                     result = whisper_model.transcribe(waveform.squeeze().numpy())
-                    print(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {result}")
+                    print(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}:")
 
                 # if not transcribe_and_save_result:
                 #     uploaded_file.status = Status.UNPROCESSED
