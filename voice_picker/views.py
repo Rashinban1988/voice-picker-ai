@@ -247,24 +247,6 @@ def millisec(timeStr):
     s = (int)((int(spl[0]) * 60 * 60 + int(spl[1]) * 60 + float(spl[2])) * 1000)
     return s
 
-def preprocess_audio(audio, t1, t2, file_path):
-    """
-    音声を調整する。
-    """
-    audio = audio.set_frame_rate(16000)  # サンプリングレートを16000Hzに変換
-    audio = audio.set_sample_width(2)     # 16bitに変換
-    audio = audio.set_channels(1)         # モノラルに変換
-    audio = audio[t1:t2]
-    audio.export(file_path, format="wav")
-
-    # 0.5秒のスペーサーを追加
-    spacer_milli = 500
-    spacer = AudioSegment.silent(duration=spacer_milli)
-    audio = spacer.append(audio, crossfade=0)
-    audio.export(file_path, format="wav")
-
-    return audio
-
 def perform_diarization(file_path):
     """
     音声ファイルをダイアライゼーション（話者分離）する。
@@ -282,7 +264,7 @@ def perform_diarization(file_path):
 
 def save_diarization_output(dz):
     """
-    ダイアライゼーション（話者分離）の結果を保存する。
+    ダイアライゼーション（話者分離）の結果を保存する。（テスト用）
     """
     with open("diarization.rttm", "w") as rttm:
         dz.write_rttm(rttm)
@@ -316,102 +298,6 @@ def extract_speakers(dz):
         dzList.append([start, end, speaker])
         processing_logger.info(f"dzList: {dzList}")
     return dzList
-
-def millisec_to_sec(milliseconds):
-    """
-    ミリ秒を秒数に変換する。
-    """
-    seconds = milliseconds // 1000  # ミリ秒を秒に変換
-    return seconds  # 秒数を返す
-
-def create_audio_segments(audio, dzList, file_path):
-    """
-    音声ファイルをセグメントに分割する。
-    同じ話者の音声は30秒まで同じセグメントにまとめる。
-    """
-    spacer_milli = 500
-    spacer = AudioSegment.silent(duration=spacer_milli)
-    sounds = spacer
-    segments = []
-    current_speaker = None
-    add_segments = AudioSegment.silent(duration=0)
-    max_segment_duration = 30 * 1000  # セグメントの最大長
-    segment_start_time = 0
-    total_segment_duration = 0
-    for l in dzList:
-        if isinstance(l, list) and len(l) == 3:
-            start, end, speaker = l  # リストからstart, end, speakerを取得
-            processing_logger.info(f"start: {start}")
-            processing_logger.info(f"end: {end}")
-            processing_logger.info(f"speaker: {speaker}")
-            # 2025-02-09 17:36:16 INFO [processing] [views.py:321] - start: 594
-            # 2025-02-09 17:36:16 INFO [processing] [views.py:322] - end: 4137
-            # 2025-02-09 17:36:16 INFO [processing] [views.py:323] - speaker: SPEAKER_04
-        else:
-            processing_logger.error(f"Invalid type for line: {type(l)}. Expected list with 3 elements.")
-            continue  # 次のループに進む
-
-        # 現在のセグメントを合わせると最大セグメント長を超える、または、話者が変わった場合、合わせているセグメントを sounds に追加し、セグメントの開始時間を記録します。
-        processing_logger.info(f"total_segment_duration: {total_segment_duration}")
-        processing_logger.info(f"end - start: {end - start}")
-        processing_logger.info(f"max_segment_duration: {max_segment_duration}")
-        processing_logger.info(f"speaker: {speaker}")
-        processing_logger.info(f"current_speaker: {current_speaker}")
-        processing_logger.info(f"segment_start_time: {segment_start_time}")
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:329] - total_segment_duration: 7086
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:330] - end - start: 304
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:331] - max_segment_duration: 30000
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:332] - speaker: SPEAKER_02
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:333] - current_speaker: SPEAKER_04
-        # 2025-02-09 17:36:16 INFO [processing] [views.py:334] - segment_start_time: 594
-        if total_segment_duration + (end - start) >= max_segment_duration or speaker != current_speaker:
-            sounds = sounds.append(add_segments, crossfade=0)
-            segments.append((segment_start_time, speaker))  # 現在のsoundsの長さを記録
-
-            # 現在のセグメントをリセット
-            init_segments = AudioSegment.silent(duration=0)
-            add_segments = init_segments
-            current_speaker = speaker # 現在の話者を更新
-            segment_start_time = start # セグメントの開始時間を記録
-            total_segment_duration = end - start # セグメントの総長を記録
-        else:
-            add_segments = add_segments.append(audio[start:end], crossfade=0)
-
-        current_speaker = speaker # 現在の話者を更新
-        total_segment_duration += (end - start) # 現在のセグメントの総長を更新
-
-    # 最後のセグメントが残っている場合は追加
-    if len(add_segments) > 0:
-        sounds = sounds.append(add_segments, crossfade=0)
-        segments.append((segment_start_time, speaker))
-
-    sounds.export(file_path, format="wav")
-    return sounds, segments
-
-def export_segment(sounds, segments, i):
-    """
-    セグメントをエクスポートする。
-    """
-    start = segments[i][0]
-    # セグメントの終了時間を設定
-    if i + 1 < len(segments):
-        end = segments[i + 1][0]
-    else:
-        end = len(sounds)  # segmentsがない場合は音声の最後まで
-    segment_audio = sounds[start:end]
-    temp_file_path = f"temp_segment_{i}.wav"
-    segment_audio.export(temp_file_path, format="wav")
-    return temp_file_path
-
-def transcribe_segment(whisper_model, temp_file_path):
-    """
-    セグメントを文字起こしする。
-    """
-    with torch.no_grad():
-        result = whisper_model.transcribe(temp_file_path, fp16=False, language="ja")
-        transcription_text = result.get("text", "")
-        processing_logger.info(f"transcription_text: {transcription_text}")
-    return transcription_text
 
 def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     """
@@ -454,18 +340,15 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             is_wav_file = False
         # pyannoteでダイアライゼーション（話者分離）を行う
         diarization = perform_diarization(temp_file_path)
-        print(f"diarization: {diarization}")
-        save_diarization_output(diarization)
+        # save_diarization_output(diarization) # テスト用
 
         audio = Audio(sample_rate=16000, mono=True)
 
         # 話者分離したデータを分割で文字起こしするより、全体を文字起こしする方が精度が高い
         whisper_model = get_whisper_model()
         all_result = whisper_model.transcribe(temp_file_path, language="ja")
-        print(f"all_result: {all_result}")
 
         # 文字起こししたデータに再生時間を基に話者データを組み合わせる、話者が変わらなければ３０秒まで同じセグメントにまとめる
-        # 合わせた文字
         segment_limit_time = 30
         temp_threshold_time = segment_limit_time
         temp_segment_transcription_text = ""
