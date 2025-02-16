@@ -191,9 +191,6 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
-    # testのために音声を30秒に切り取る
-    audio = audio[:30 * 1000]
-
     # 音声の正規化
     audio = audio.normalize()
 
@@ -423,7 +420,7 @@ def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     processing_logger.info(f"Saving transcription: start_time={start}, text={transcription_text}, speaker={speaker}")
 
     serializer_class = TranscriptionSerializer(data={
-        "start_time": millisec_to_sec(start),
+        "start_time": start,
         "text": transcription_text,
         "uploaded_file": uploaded_file_id,
         "speaker": speaker,
@@ -448,40 +445,121 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     """
 
     try:
-        # ファイルのパスを取得
-        file_path = UploadedFile.objects.get(id=uploaded_file_id).file.path
+        # pyannoteはwavファイルの方が精度が高いので、wavファイルに変換する
+        is_wav_file = True
+        temp_file_path = file_path
         file_extension = os.path.splitext(file_path)[1]
-
         if file_extension != ".wav":
-            file_path, file_extension = process_audio(file_path, file_extension)
+            temp_file_path, file_extension = process_audio(file_path, file_extension)
+            is_wav_file = False
+        # pyannoteでダイアライゼーション（話者分離）を行う
+        diarization = perform_diarization(temp_file_path)
+        print(f"diarization: {diarization}")
+        save_diarization_output(diarization)
 
-        whisper_model = get_whisper_model()
-
-        diarization = perform_diarization(file_path)
-        with open("audio.rttm", "w") as rttm:
-            diarization.write_rttm(rttm)
         audio = Audio(sample_rate=16000, mono=True)
 
-        for segment, _, speaker in diarization.itertracks(yield_label=True):
-            waveform, sample_rate = audio.crop(file_path, segment)
-            result = whisper_model.transcribe(waveform.squeeze().numpy())
+        # 話者分離したデータを分割で文字起こしするより、全体を文字起こしする方が精度が高い
+        whisper_model = get_whisper_model()
+        all_result = whisper_model.transcribe(temp_file_path, language="ja")
+        print(f"all_result: {all_result}")
 
-            processing_logger.info(f"result: {result}")
+        # 文字起こししたデータに再生時間を基に話者データを組み合わせる、話者が変わらなければ３０秒まで同じセグメントにまとめる
+        # 合わせた文字
+        segment_limit_time = 30
+        temp_threshold_time = segment_limit_time
+        temp_segment_transcription_text = ""
+        temp_segment_start_time = 0
+        temp_segment_speaker = ""
+        # for segment, _, speaker in diarization.itertracks(yield_label=True):
+        #     # セグメントの開始時間と終了時間を取得
+        #     segment_start_time = segment.start
+        #     segment_end_time = segment.end
 
-            # resultがリストである場合、最初の要素を取得
-            if isinstance(result, list) and len(result) > 0:
-                processing_logger.info(f"result[0]: {result[0]}")
-                text = result[0].get("text", "")
-            else:
-                processing_logger.info(f"result is not list or empty")
-                text = ""  # デフォルト値を設定
+        #     waveform, sample_rate = audio.crop(temp_file_path, segment)
+        #     # waveformが正しい形式であることを確認
+        #     if isinstance(waveform, list):
+        #         waveform = torch.tensor(waveform)  # リストをテンソルに変換
+        #     # waveformが2次元テンソルの場合、1次元に変換
+        #     if waveform.ndim == 2:
+        #         waveform = waveform.mean(dim=0)  # チャンネルを平均化
 
-            processing_logger.info(f"[{segment.start:03.1f}s - {segment.end:03.1f}s] {speaker}: {text}")
+        #     dz_result = whisper_model.transcribe(waveform.numpy(), language="ja")
 
-            start_sec = millisec_to_sec(segment.start)
+        #     # 話者情報を付加するための文字起こし結果を見つける
+        #     for result in all_result['segments']:
+        #         # 文字起こしの開始時間と終了時間を取得
+        #         result_start = result['start']
+        #         result_end = result['end']
 
-            save_transcription(text, start_sec, uploaded_file_id, speaker)
+        #         # セグメントの時間と文字起こしの時間が重なっているか確認
+        #         if segment_start_time <= result_start <= segment_end_time or segment_start_time <= result_end <= segment_end_time:
+        #             sec_start = int(result_start)
+        #             sec_end = int(result_end)
 
+        #             # 話者が変わらず、temp_threshold_timeを超えていない場合、temp_segment_transcription_textに追加
+        #             if speaker == temp_segment_speaker:
+        #                 if sec_end < temp_threshold_time:
+        #                     temp_segment_transcription_text += result['text']
+        #                 else:
+        #                     save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
+        #                     temp_segment_transcription_text = result['text']
+        #                     temp_threshold_time = sec_start + segment_limit_time
+        #                     temp_segment_start_time = sec_start
+        #                     temp_segment_speaker = speaker
+        #             else:
+        #                 save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
+        #                 temp_segment_transcription_text = result['text']
+        #                 temp_threshold_time = sec_start + segment_limit_time
+        #                 temp_segment_start_time = sec_start
+        #                 temp_segment_speaker = speaker
+
+        #             print(f"[{sec_start}s - {sec_end}s] {speaker}: {result['text']}")
+        #             print("------------------------------------------------------------------------------------------------")
+        #             break
+        
+        # 文字起こしからループを回すバージョン
+        for result in all_result['segments']:
+            result_start = result['start']
+            result_end = result['end']
+            result_text = result['text']
+
+            for segment, _, speaker in diarization.itertracks(yield_label=True):
+                segment_start_time = segment.start
+                segment_end_time = segment.end
+
+                # セグメントの時間と文字起こしの時間が重なっているか確認
+                if result_start <= segment_start_time <= result_end or result_start <= segment_end_time <= result_end:
+                    sec_start = int(result_start)
+                    sec_end = int(result_end)
+
+                    # 話者が変わらず、temp_threshold_timeを超えていない場合、temp_segment_transcription_textに追加
+                    if speaker == temp_segment_speaker:
+                        if sec_end < temp_threshold_time:
+                            temp_segment_transcription_text += result_text
+                        else:
+                            save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
+                            temp_segment_transcription_text = result_text
+                            temp_threshold_time = sec_start + segment_limit_time
+                            temp_segment_start_time = sec_start
+                            temp_segment_speaker = speaker
+                    else:
+                        save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
+                        temp_segment_transcription_text = result_text
+                        temp_threshold_time = sec_start + segment_limit_time
+                        temp_segment_start_time = sec_start
+                        temp_segment_speaker = speaker
+
+                    print(f"[{sec_start}s - {sec_end}s] {speaker}: {result_text}")
+                    print("------------------------------------------------------------------------------------------------")
+                    break
+
+        # 最後のセグメントが残っている場合は保存
+        if temp_segment_transcription_text != "":
+            save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
+        # ファイルを削除
+        if not is_wav_file:
+            os.remove(temp_file_path)
         return True
     except Exception as e:
         processing_logger.error(f"エラーが発生しました: {e}")
