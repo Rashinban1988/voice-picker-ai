@@ -416,7 +416,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
                     sec_start = int(result_start)
                     sec_end = int(result_end)
 
-                    # 話者が変わらず、temp_threshold_timeを超えていない場合、temp_segment_transcription_textに追加
+                    # 話者が変わるか、話者が変わらなくてもtemp_threshold_timeを超えている場合、保存する
                     if speaker == temp_segment_speaker:
                         if sec_end < temp_threshold_time:
                             temp_segment_transcription_text += result_text
