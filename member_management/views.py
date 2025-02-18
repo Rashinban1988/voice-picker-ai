@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth import authenticate, login
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
@@ -85,12 +85,11 @@ class RegisterView(View):
 
     def verify_email(request, uidb64):
         if request.method == 'GET':
-            user_id = urlsafe_base64_decode(uidb64).decode()
-            user = get_object_or_404(User, pk=user_id)
+            user = get_object_or_404(User, pk=uidb64)
             user.email_verified_at = timezone.now()
             user.is_active = True  # ユーザーをアクティブにする
             user.save()
-            return JsonResponse({'message': 'メールアドレスが確認されました。'}, status=status.HTTP_200_OK)
+            return redirect('http://85.131.245.70/auth/register-success')
         else:
             return JsonResponse({'message': '不正なリクエストです。'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
