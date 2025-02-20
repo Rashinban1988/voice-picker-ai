@@ -52,7 +52,7 @@ class RegisterView(View):
 
                 # ユーザーを作成
                 user = User(
-                    organization=organization
+                    organization=organization,
                     username=user_data.email,
                     password=user_data.password,
                     last_name=user_data.sei,
