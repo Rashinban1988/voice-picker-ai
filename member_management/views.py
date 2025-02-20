@@ -92,7 +92,8 @@ class RegisterView(View):
 
     def verify_email(request, uidb64):
         if request.method == 'GET':
-            user = get_object_or_404(User, pk=uidb64)
+            user_id = urlsafe_base64_decode(uidb64).decode()
+            user = get_object_or_404(User, pk=user_id)
             user.email_verified_at = timezone.now()
             user.is_active = True  # ユーザーをアクティブにする
             user.save()
