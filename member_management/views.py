@@ -51,8 +51,15 @@ class RegisterView(View):
                 )
 
                 # ユーザーを作成
-                user = User(username=user_data.email, last_name=user_data.sei, first_name=user_data.mei, email=user_data.email, phone_number=user_data.phone_number, organization=organization)
-                user.set_password(user_data.password)  # パスワードをハッシュ化して設定
+                user = User(
+                    organization=organization
+                    username=user_data.email,
+                    password=user_data.password,
+                    last_name=user_data.sei,
+                    first_name=user_data.mei,
+                    email=user_data.email,
+                    phone_number=user_data.phone_number,
+                )
                 user.save()
 
                 # メールアドレスの確認メールを送信
@@ -89,7 +96,10 @@ class RegisterView(View):
             user.email_verified_at = timezone.now()
             user.is_active = True  # ユーザーをアクティブにする
             user.save()
-            return redirect('http://85.131.245.70/auth/register-success')
+
+            next_js_host = config("NEXT_JS_HOST")
+            next_js_port = config("NEXT_JS_PORT")
+            return redirect(f'{next_js_host}:{next_js_port}/auth/register-success')
         else:
             return JsonResponse({'message': '不正なリクエストです。'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
