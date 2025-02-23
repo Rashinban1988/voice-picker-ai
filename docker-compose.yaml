@@ -5,9 +5,9 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     platform: linux/amd64
-    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:8000 --noreload" # デバッグ無
-    # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:8000 --reload" # デバッグ無
-    # command: sh -c "cron -f & echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:8000" # デバッグ有
+    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --noreload" # デバッグ無
+    # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --reload" # デバッグ無
+    # command: sh -c "cron -f & echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT}" # デバッグ有
     volumes:
       - .:/code
     networks:

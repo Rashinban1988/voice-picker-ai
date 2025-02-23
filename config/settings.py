@@ -29,10 +29,9 @@ SECRET_KEY = config('DJANGO_SECRET_KEY')
 DEBUG = config('DEBUG', default=False)
 
 ALLOWED_HOSTS = [
-    'http://85.131.245.70',
-    'http://127.0.0.1:3000',
-    'http://localhost:3000',
-    'localhost:3000',
+    '85.131.245.70',
+    '127.0.0.1',
+    'localhost',
     '*',
 ]
 
