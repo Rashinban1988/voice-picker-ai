@@ -1,4 +1,6 @@
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
+from .models.organization import Organization
 from .models.user import User
 from django.http import JsonResponse
 from rest_framework import status
@@ -26,3 +28,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['access'] = str(refresh.access_token)
         data['organization_id'] = str(self.user.organization.id)
         return data
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = '__all__'
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'organization', 'username', 'last_name', 'first_name', 'email', 'phone_number', 'is_admin', 'is_active', 'created_at', 'updated_at', 'deleted_at']
