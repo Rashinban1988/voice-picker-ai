@@ -10,7 +10,8 @@ from django.http import JsonResponse
 from django.views import View
 from rest_framework import status
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
+from rest_framework import viewsets
+from .serializers import CustomTokenObtainPairSerializer, OrganizationSerializer, UserSerializer
 from .models.user import User
 from .models.organization import Organization
 from .schemas import UserCreate, OrganizationCreate
@@ -132,3 +133,37 @@ class LoginView(View):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+class OrganizationViewSet(viewsets.ModelViewSet):
+    queryset = Organization.objects.all()
+    serializer_class = OrganizationSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        organization = user.organization
+
+        # 運営の場合は全組織のデータを返す
+        if user.is_staff or user.is_superuser:
+            return Organization.objects.all()
+
+        # 管理者、一般ユーザーの場合は自分の組織のデータを返す
+        return Organization.objects.filter(id=organization.id)
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        organization = user.organization
+
+        # 運営の場合は全ユーザーのデータを返す
+        if user.is_staff or user.is_superuser:
+            return User.objects.all()
+
+        # 組織管理者の場合は組織のユーザーのデータを返す
+        elif user.is_admin:
+            return User.objects.filter(organization=organization)
+
+        # 一般ユーザーの場合は自分のデータのみ返す
+        return User.objects.filter(id=user.id)

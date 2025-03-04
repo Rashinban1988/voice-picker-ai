@@ -29,10 +29,9 @@ urlpatterns = [
     path('voice_picker/', include('voice_picker.urls')),
     path('admin/', admin_site.urls),
     path('job_seekers/', include('job_seekers.urls')),
-    # path('common/', include('common.urls')),
-    # path('companies/', include('companies.urls')),
-    # path('calendar/', include('calendar_app.urls')),
     path('member_management/', include('member_management.urls')),
+
+    path('api/', include('config.api_urls')),
 ]
 
 if settings.DEBUG:
