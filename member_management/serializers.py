@@ -36,6 +36,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    organization = OrganizationSerializer(read_only=True)
+
     class Meta:
         model = User
         fields = ['id', 'organization', 'username', 'last_name', 'first_name', 'email', 'phone_number', 'is_admin', 'is_active', 'created_at', 'updated_at', 'deleted_at']
