@@ -11,6 +11,8 @@ from django.views import View
 from rest_framework import status
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from .serializers import CustomTokenObtainPairSerializer, OrganizationSerializer, UserSerializer
 from .models.user import User
 from .models.organization import Organization
@@ -152,6 +154,12 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def me(self, request):
+        user = request.user
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
 
     def get_queryset(self):
         user = self.request.user

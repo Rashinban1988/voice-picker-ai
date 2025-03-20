@@ -12,6 +12,7 @@ router.register(r'organizations', OrganizationViewSet, basename='organizations')
 urlpatterns = [
     path('token/', csrf_exempt(CustomTokenObtainPairView.as_view()), name='token_obtain_pair'),  # トークン取得
     path('token/refresh/', csrf_exempt(TokenRefreshView.as_view()), name='token_refresh'),       # トークンリフレッシュ
+    path('users/me/', csrf_exempt(UserViewSet.as_view({'get': 'me'})), name='users_me'),
 ]
 
 urlpatterns += router.urls
