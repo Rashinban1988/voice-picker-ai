@@ -24,6 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY')
+NEXT_JS_HOST = config('NEXT_JS_HOST')
+NEXT_JS_PORT = config('NEXT_JS_PORT')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False)
@@ -61,12 +63,8 @@ INSTALLED_APPS = [
     # 'djoser', # 認証
 
     # my apps
-    'common',
-    'job_seekers',
-    'companies',
-    'calendar_app',
-    'member_management', # 会員管理
-    'voice_picker',
+    'member_management.apps.MemberManagementConfig', # 会員管理
+    'voice_picker.apps.VoicePickerConfig', # 音声文字起こし
 ]
 
 AUTH_USER_MODEL = 'member_management.User'  # 'member_management'はカスタムユーザーモデルを定義したアプリ名
