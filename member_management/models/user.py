@@ -9,24 +9,6 @@ from .organization import Organization
 import uuid
 
 class CustomUserManager(BaseUserManager):
-    """
-    custom userの場合、custom User Managerを作成する必要がある。
-    userとsuperuserを作る関数のみを上書きする。
-    """
-    def create_user(self, username, email, password, **extra_fields):
-        if not username:
-            raise ValueError('The username must be set.')
-        if not email:
-            raise ValueError('The email must be set.')
-        if not password:
-            raise ValueError('The password must be set.')
-
-        user = self.model(username=username, email=self.normalize_email(email), **extra_fields)
-        user.set_password(password)
-        user.save()
-
-        return user
-
     def create_superuser(self, username, email, password, **extra_fields):
         if not username:
             raise ValueError('The username must be set.')
