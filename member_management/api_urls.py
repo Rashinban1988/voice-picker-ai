@@ -4,7 +4,8 @@ from .views import UserViewSet, OrganizationViewSet
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import CustomTokenObtainPairView
 from django.views.decorators.csrf import csrf_exempt
-from .views import RegisterView, EmailVerificationView
+from .views import RegisterView, UserViewSet, EmailVerificationView
+
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet, basename='users')
 router.register(r'organizations', OrganizationViewSet, basename='organizations')

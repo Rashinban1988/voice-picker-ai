@@ -1,25 +1,16 @@
 from django.db import transaction
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth import authenticate, login
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes
-from django.utils import timezone
-from django.urls import reverse
-from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.views import View
 from rest_framework import status
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from member_management.services import AuthService, UserService, OrganizationService
+from member_management.services import UserService, OrganizationService
 from .serializers import CustomTokenObtainPairSerializer, OrganizationSerializer, UserSerializer
 from .models import User, Organization
 from .schemas import UserCreateData, OrganizationCreateData
 import json
 import logging
-from decouple import config
 
 api_logger = logging.getLogger('django')
 
@@ -52,6 +43,46 @@ class RegisterView(View):
         except Exception as e:
             api_logger.error(f"User registration failed: {e}")
             return JsonResponse({'message': 'ユーザーが作成できませんでした'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class OrganizationViewSet(viewsets.ModelViewSet):
+    queryset = Organization.objects.all()
+    serializer_class = OrganizationSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        organization = user.organization
+
+        # 運営の場合は全組織のデータを返す
+        if user.is_staff or user.is_superuser:
+            return Organization.objects.all()
+
+        # 管理者、一般ユーザーの場合は自分の組織のデータを返す
+        return Organization.objects.filter(id=organization.id)
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        organization = user.organization
+
+        # 運営の場合は全ユーザーのデータを返す
+        if user.is_staff or user.is_superuser:
+            return User.objects.all()
+
+        # 組織管理者の場合は組織のユーザーのデータを返す
+        elif user.is_admin:
+            return User.objects.filter(organization=organization)
+
+        # 一般ユーザーの場合は自分のデータのみ返す
+        return User.objects.filter(id=user.id)
+
+    def me(self, request):
+        # 現在のユーザーの情報のみをシリアライズして返す
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
 
 class EmailVerificationView(View):
     def get(self, request, uidb64):

@@ -1,17 +1,14 @@
 from django.core.mail import send_mail
-from django.db import transaction
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from decouple import config
 from django.utils import timezone
-from django.shortcuts import get_object_or_404, redirect
-from django.http import JsonResponse, Http404
+from django.shortcuts import redirect
 from django.utils.http import urlsafe_base64_decode
-from rest_framework import status
 from django.conf import settings
 from member_management.models import User
-from member_management.schemas import UserCreateData, OrganizationCreateData
+from member_management.schemas import UserCreateData
 import logging
 api_logger = logging.getLogger('api')
 
