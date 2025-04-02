@@ -17,7 +17,7 @@ class APITestCase(TestCase):
     def test_admin_flow(self, mock_send_email):
         # 1.登録
         mock_send_email.return_value = None
-        response = self.organization_client.post('/member_management/api/register/', {
+        response = self.organization_client.post('/api/register/', {
             'name': 'Test Org',
             'phone_number': '08012345678',
             'sei': 'org_last_name',
@@ -44,29 +44,35 @@ class APITestCase(TestCase):
         self.organization_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         print('test_login ok')
 
-        # 4.ユーザー作成
+        # 4.adminマイページ情報取得
+        response = self.organization_client.get('/api/users/me/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['email'], 'test_org@gmail.com')
+        self.assertEqual(response.json()['last_name'], 'org_last_name')
+        self.assertEqual(response.json()['first_name'], 'org_first_name')
+        self.assertEqual(response.json()['phone_number'], '08012345678')
+        print('test_get_me ok')
+
+        # 5.ユーザー作成
         response = self.organization_client.post('/api/users/', {
             'username': 'test_user@gmail.com',
             'email': 'test_user@gmail.com',
             'password': 'test_user',
             'last_name': 'user_last_name',
             'first_name': 'user_first_name',
-            'phone_number': '08012345678'
+            'phone_number': '08009876543'
         }, format='json')
         self.assertEqual(response.status_code, 201)
         print('test_create_user ok')
 
-        # 5.adminマイページ情報取得
-        response = self.user_client.get('/api/users/me/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['email'], 'test_user@gmail.com')
-        self.assertEqual(response.json()['last_name'], 'user_last_name')
-        self.assertEqual(response.json()['first_name'], 'user_first_name')
-        self.assertEqual(response.json()['phone_number'], '08012345678')
-        print('test_get_me ok')
+        # 6.メール認証
+        user = User.objects.get(email='test_user@gmail.com')
+        response = self.organization_client.get(reverse('verify_email', kwargs={'uidb64': urlsafe_base64_encode(force_bytes(user.pk))}))
+        self.assertIn(response.status_code, [200, 302])
+        print('test_verify_email ok')
 
-        # 6.userログイン
-        login_response = self.organization_client.post('/api/token/', {
+        # 7.userログイン
+        login_response = self.user_client.post('/api/token/', {
             'username': 'test_user@gmail.com',
             'password': 'test_user'
         })
@@ -74,14 +80,21 @@ class APITestCase(TestCase):
         self.user_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         print('test_login_user ok')
 
-        # 7.userマイページ情報取得
+        # 8.userマイページ情報取得
         response = self.user_client.get('/api/users/me/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['email'], 'test_user@gmail.com')
         self.assertEqual(response.json()['last_name'], 'user_last_name')
         self.assertEqual(response.json()['first_name'], 'user_first_name')
-        self.assertEqual(response.json()['phone_number'], '08012345678')
+        self.assertEqual(response.json()['phone_number'], '08009876543')
         print('test_get_me_user ok')
+
+        # 9.ユーザー一覧取得
+        response = self.organization_client.get('/api/users/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 2)
+        print(response.json())
+        print('test_get_users ok')
 
 # class IntegrationTests(TestCase):
 #     def setUp(self):
