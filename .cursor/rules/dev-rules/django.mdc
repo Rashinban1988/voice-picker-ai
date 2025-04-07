@@ -1,0 +1,189 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: DjangoとDjango REST Frameworkの開発ルール
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# Django & DRF 開発ルール
+
+## 1. プロジェクト構造
+
+### 1.1 ディレクトリ構成
+```
+project/
+├── app1/                   # アプリケーションディレクトリ
+├── app2/                   # アプリケーションディレクトリ
+├── config/                 # プロジェクト設定
+│   ├── settings/
+│   │   ├── base.py         # 基本設定
+│   │   ├── development.py  # 開発環境設定
+│   │   └── production.py   # 本番環境設定
+│   └── urls.py
+├── templates/              # プロジェクト全体のテンプレート
+└── requirements/           # 依存関係管理
+    ├── base.txt
+    ├── development.txt
+    └── production.txt
+```
+
+## 2. コーディング規約
+
+### 2.1 命名規則
+- クラス名: PascalCase
+- 関数名・変数名: snake_case
+- 定数: UPPER_CASE
+- モデル名: 単数形のPascalCase
+- テーブル名: 複数形のsnake_case
+
+### 2.2 インポート順序
+1. 標準ライブラリ
+2. サードパーティライブラリ
+3. Django関連
+4. プロジェクト内のモジュール
+
+### 2.3 モデル定義
+```python
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+class User(models.Model):
+    """ユーザーモデル"""
+    email = models.EmailField(_('email address'), unique=True)
+    is_active = models.BooleanField(_('active'), default=True)
+
+    class Meta:
+        verbose_name = _('user')
+        verbose_name_plural = _('users')
+        ordering = ['-date_joined']
+```
+
+## 3. Django REST Framework
+
+### 3.1 シリアライザー
+```python
+from rest_framework import serializers
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'email', 'is_active']
+        read_only_fields = ['id']
+```
+
+### 3.2 ビューセット
+```python
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(is_active=True)
+```
+
+## 4. セキュリティ
+
+### 4.1 必須設定
+- `SECRET_KEY`は環境変数から取得
+- `DEBUG=False` in production
+- `ALLOWED_HOSTS`の適切な設定
+- CSRF対策の有効化
+- CORS設定の適切な管理
+
+### 4.2 パスワード管理
+- パスワードは必ずハッシュ化
+- デフォルトのパスワードバリデーションを使用
+- セッションタイムアウトの設定
+
+## 5. パフォーマンス
+
+### 5.1 データベース最適化
+- `select_related()`と`prefetch_related()`の適切な使用
+- インデックスの適切な設定
+- クエリのN+1問題の回避
+
+### 5.2 キャッシュ戦略
+- 適切なキャッシュバックエンドの使用
+- キャッシュキーの一貫性
+- キャッシュの無効化戦略
+
+## 6. テスト
+
+### 6.1 テスト構造
+```python
+from django.test import TestCase
+from rest_framework.test import APITestCase
+
+class UserTestCase(TestCase):
+    def setUp(self):
+        self.user = User.objects.create(email='test@example.com')
+
+    def test_user_creation(self):
+        self.assertEqual(self.user.email, 'test@example.com')
+```
+
+### 6.2 テストカバレッジ
+- ユニットテスト: 80%以上
+- 統合テスト: 主要な機能
+- APIテスト: 全エンドポイント
+
+## 7. ドキュメント
+
+### 7.1 コードドキュメント
+- すべてのクラスとメソッドにdocstring
+- 複雑なロジックにはコメント
+- 型ヒントの使用
+
+### 7.2 APIドキュメント
+- Swagger/OpenAPIの使用
+- エンドポイントの詳細な説明
+- リクエスト/レスポンスの例
+
+## 8. デプロイメント
+
+### 8.1 環境設定
+- 環境変数の適切な管理
+- 設定ファイルの分離
+- ログ設定の最適化
+
+### 8.2 監視
+- エラーログの収集
+- パフォーマンスメトリクスの監視
+- ヘルスチェックの実装
+
+## 9. バージョン管理
+
+### 9.1 マイグレーション
+- マイグレーションファイルの適切な命名
+- データマイグレーションの慎重な管理
+- ロールバック計画の準備
+
+### 9.2 依存関係
+- requirements.txtの定期的な更新
+- バージョンの固定
+- セキュリティアップデートの追跡
+
+## 10. エラーハンドリング
+
+### 10.1 例外処理
+```python
+from rest_framework.exceptions import APIException
+
+class CustomException(APIException):
+    status_code = 400
+    default_detail = 'カスタムエラーメッセージ'
+    default_code = 'custom_error'
+```
+
+### 10.2 ログ管理
+- 適切なログレベル設定
+- 構造化ログの使用
+- エラートレースの保存
