@@ -81,19 +81,28 @@ class APITestCase(TestCase):
         print('test_login_user ok')
 
         # 8.userマイページ情報取得
-        response = self.user_client.get('/api/users/me/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['email'], 'test_user@gmail.com')
-        self.assertEqual(response.json()['last_name'], 'user_last_name')
-        self.assertEqual(response.json()['first_name'], 'user_first_name')
-        self.assertEqual(response.json()['phone_number'], '08009876543')
+        user_data = self.user_client.get('/api/users/me/')
+        self.assertEqual(user_data.status_code, 200)
+        self.assertEqual(user_data.json()['email'], 'test_user@gmail.com')
+        self.assertEqual(user_data.json()['last_name'], 'user_last_name')
+        self.assertEqual(user_data.json()['first_name'], 'user_first_name')
+        self.assertEqual(user_data.json()['phone_number'], '08009876543')
         print('test_get_me_user ok')
+
+        # 9.ユーザー情報の更新
+        response = self.organization_client.put(f'/api/users/{user_data.json()["id"]}/', {
+            'email': 'test_user_updated@gmail.com',
+            'last_name': 'updated_last_name',
+            'first_name': 'updated_first_name',
+            'phone_number': '08009876544'
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        print('test_update_user ok')
 
         # 9.ユーザー一覧取得
         response = self.organization_client.get('/api/users/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 2)
-        print(response.json())
         print('test_get_users ok')
 
 # class IntegrationTests(TestCase):
