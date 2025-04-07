@@ -78,6 +78,15 @@ class UserViewSet(viewsets.ModelViewSet):
         # 一般ユーザーの場合は自分のデータのみ返す
         return User.objects.filter(id=user.id)
 
+    def perform_create(self, serializer):
+        user = serializer.save(organization=self.request.user.organization)
+
+        try:
+            UserService.send_verification_email(user)
+        except Exception as e:
+            api_logger.error(f"User registration email sending failed: {e}")
+            raise
+
     def me(self, request):
         # 現在のユーザーの情報のみをシリアライズして返す
         serializer = self.get_serializer(request.user)
