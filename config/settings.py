@@ -142,6 +142,9 @@ DATABASES = {
     }
 }
 
+# Docker settings
+DOCKER_ENV = config('DOCKER_ENV', default=False, cast=bool)
+DOCKER_SERVICE_NAME = config('DOCKER_SERVICE_NAME', default='django')
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
