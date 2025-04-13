@@ -26,6 +26,21 @@ class CustomUserManager(BaseUserManager):
 
         return user
 
+    def get_queryset_by_login_user(self, user):
+        """
+        ユーザーの権限に基づいて適切なクエリセットを返す
+        """
+        # 運営の場合は全ユーザーのデータを返す
+        if user.is_staff or user.is_superuser:
+            return self.all()
+
+        # 組織管理者の場合は組織のユーザーのデータを返す
+        if user.is_admin:
+            return self.filter(organization=user.organization)
+
+        # 一般ユーザーの場合は自分のデータのみ返す
+        return self.filter(id=user.id)
+
 class User(AbstractBaseUser, PermissionsMixin):
     username_validator = UnicodeUsernameValidator()
 
