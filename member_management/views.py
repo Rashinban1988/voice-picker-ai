@@ -64,19 +64,7 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        organization = user.organization
-
-        # 運営の場合は全ユーザーのデータを返す
-        if user.is_staff or user.is_superuser:
-            return User.objects.all()
-
-        # 組織管理者の場合は組織のユーザーのデータを返す
-        elif user.is_admin:
-            return User.objects.filter(organization=organization)
-
-        # 一般ユーザーの場合は自分のデータのみ返す
-        return User.objects.filter(id=user.id)
+        return User.objects.get_queryset_by_login_user(self.request.user)
 
     def perform_create(self, serializer):
         user = serializer.save(organization=self.request.user.organization)
