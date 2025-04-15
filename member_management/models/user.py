@@ -9,24 +9,6 @@ from .organization import Organization
 import uuid
 
 class CustomUserManager(BaseUserManager):
-    """
-    custom userの場合、custom User Managerを作成する必要がある。
-    userとsuperuserを作る関数のみを上書きする。
-    """
-    def create_user(self, username, email, password, **extra_fields):
-        if not username:
-            raise ValueError('The username must be set.')
-        if not email:
-            raise ValueError('The email must be set.')
-        if not password:
-            raise ValueError('The password must be set.')
-
-        user = self.model(username=username, email=self.normalize_email(email), **extra_fields)
-        user.set_password(password)
-        user.save()
-
-        return user
-
     def create_superuser(self, username, email, password, **extra_fields):
         if not username:
             raise ValueError('The username must be set.')
@@ -43,6 +25,21 @@ class CustomUserManager(BaseUserManager):
         user.save()
 
         return user
+
+    def get_queryset_by_login_user(self, user):
+        """
+        ユーザーの権限に基づいて適切なクエリセットを返す
+        """
+        # 運営の場合は全ユーザーのデータを返す
+        if user.is_staff or user.is_superuser:
+            return self.all()
+
+        # 組織管理者の場合は組織のユーザーのデータを返す
+        if user.is_admin:
+            return self.filter(organization=user.organization)
+
+        # 一般ユーザーの場合は自分のデータのみ返す
+        return self.filter(id=user.id)
 
 class User(AbstractBaseUser, PermissionsMixin):
     username_validator = UnicodeUsernameValidator()

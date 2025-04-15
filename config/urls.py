@@ -26,9 +26,8 @@ from django.urls import re_path
 
 urlpatterns = [
     path('', views.home, name='home'),
-    path('voice_picker/', include('voice_picker.urls')),
     path('admin/', admin_site.urls),
-    path('job_seekers/', include('job_seekers.urls')),
+    path('voice_picker/', include('voice_picker.urls')),
     path('member_management/', include('member_management.urls')),
 
     path('api/', include('config.api_urls')),

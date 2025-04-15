@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field, field_validator
+from member_management.models import User
 import re
 
-class UserCreate(BaseModel):
+class UserCreateData(BaseModel):
     sei: str = Field(..., title="姓")
     mei: str = Field(..., title="名")
     email: str = Field(..., title="メールアドレス")
@@ -12,4 +13,18 @@ class UserCreate(BaseModel):
     def validate_email(cls, v):
         if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', v):
             raise ValueError('無効なメールアドレスです')
+        if User.objects.filter(email=v).exists():
+            raise ValueError('メールアドレスが既に存在します')
+        return v
+
+    @field_validator('phone_number')
+    def validate_phone_number(cls, v):
+        if not re.match(r'^[0-9]{10,11}$', v):
+            raise ValueError('無効な電話番号です')
+        return v
+
+    @field_validator('password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('パスワードは8文字以上である必要があります')
         return v
