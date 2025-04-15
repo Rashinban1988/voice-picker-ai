@@ -1,2 +1,2 @@
-from .user import UserCreate
-from .organization import OrganizationCreate
+from .user import UserCreateData
+from .organization import OrganizationCreateData
