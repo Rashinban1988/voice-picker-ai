@@ -3,8 +3,8 @@ from member_management.models import User
 import re
 
 class UserCreateData(BaseModel):
-    sei: str = Field(..., title="姓")
-    mei: str = Field(..., title="名")
+    last_name: str = Field(..., title="姓")
+    first_name: str = Field(..., title="名")
     email: str = Field(..., title="メールアドレス")
     password: str = Field(..., title="パスワード")
     phone_number: str = Field(..., title="電話番号")

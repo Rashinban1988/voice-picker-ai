@@ -68,7 +68,9 @@ class UserViewSet(viewsets.ModelViewSet):
         return User.objects.get_queryset_by_login_user(self.request.user)
 
     def perform_create(self, serializer):
-        user = serializer.save(organization=self.request.user.organization)
+        user_data = UserCreateData(**serializer.validated_data)
+        user_service = UserService(self.request.user.organization)
+        user = user_service.create_user(user_data, is_register_view=False)
 
         try:
             UserService.send_verification_email(user)
