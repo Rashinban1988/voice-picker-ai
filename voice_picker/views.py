@@ -400,7 +400,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         #             print(f"[{sec_start}s - {sec_end}s] {speaker}: {result['text']}")
         #             print("------------------------------------------------------------------------------------------------")
         #             break
-        
+
         # 文字起こしからループを回すバージョン
         for result in all_result['segments']:
             result_start = result['start']
@@ -484,14 +484,14 @@ def summarize_text(text: str) -> str:
     Args:
         text (str): 要約するテキスト
     Returns:
-        str: 要約されたテキスト
+        str: マークダウン形式で要約されたテキスト
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、要約を作成してください：\n\n{text}"}
+                {"role": "system", "content": "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"},
+                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"}
             ],
             max_tokens=500  # 応答の最大長を制限
         )
@@ -507,14 +507,14 @@ def definition_issue(text: str) -> str:
     Args:
         text (str): 分析するテキスト
     Returns:
-        str: 主要な課題点
+        str: マークダウン形式で主要な課題点
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\n\n{text}"}
+                {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
+                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
             ],
             max_tokens=500  # 応答の最大長を制限
         )
@@ -530,14 +530,14 @@ def definition_solution(text: str) -> str:
     Args:
         text (str): 分析するテキスト
     Returns:
-        str: 取り組み案
+        str: マークダウン形式で取り組み案
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\n\n{text}"}
+                {"role": "system", "content": "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
+                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
             ],
             max_tokens=500  # 応答の最大長を制限
         )
@@ -545,3 +545,26 @@ def definition_solution(text: str) -> str:
     except Exception as e:
         processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
         return "分析に失敗しました。"
+
+def create_meeting_minutes(text: str) -> str:
+    """
+    テキストを分析し、議事録を作成する。
+
+    Args:
+        text (str): 分析するテキスト
+    Returns:
+        str: マークダウン形式で議事録
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "あなたは文章を分析し、議事録を作成する専門家です。応答は必ずマークダウン形式で出力してください。"},
+                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で議事録を作成してください：\\n\\n{text}"}
+            ],
+            max_tokens=500  # 応答の最大長を制限
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        processing_logger.error(f"議事録作成中にエラーが発生しました: {e}")
+        return "議事録作成に失敗しました。"
