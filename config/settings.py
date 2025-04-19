@@ -31,6 +31,7 @@ NEXT_JS_PORT = config('NEXT_JS_PORT')
 DEBUG = config('DEBUG', default=False)
 
 ALLOWED_HOSTS = [
+    'voice-picker-ai.com',
     '85.131.245.70',
     '127.0.0.1',
     'localhost',
