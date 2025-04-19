@@ -464,6 +464,11 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
     try:
         uploaded_file = UploadedFile.objects.select_for_update().get(id=uploaded_file.id)
         transcriptions = uploaded_file.transcription.all()
+
+        if not transcriptions.exists():
+            logger.warning(f"文字起こしデータがありません。uploaded_file_id: {uploaded_file.id}")
+            return False
+
         all_transcription_text = "".join(transcription.text for transcription in transcriptions)
 
         summary_text = summarize_text(all_transcription_text)

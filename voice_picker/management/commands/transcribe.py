@@ -11,43 +11,48 @@ processing_logger = logging.getLogger('processing')
 class Command(BaseCommand):
     help = '音声ファイルを文字起こしする'
 
-    @transaction.atomic
     def handle(self, *args, **options):
-        processing_logger.info('文字起こし処理を開始します。')
-        # transcriptionを持っていないuploaded_fileを取得
-        uploaded_files = UploadedFile.objects.filter(transcription__isnull=True, status=Status.UNPROCESSED).select_for_update()
+        unprocessed_files = UploadedFile.objects.filter(
+            transcription__isnull=True,
+            status=Status.UNPROCESSED
+        )
 
-        if not uploaded_files.exists():
+        if not unprocessed_files.exists():
             processing_logger.info('文字起こしするファイルがありませんでした。')
             return
 
-        for uploaded_file in uploaded_files:
+        file_ids = list(unprocessed_files.values_list('id', flat=True))
+        UploadedFile.objects.filter(id__in=file_ids).update(status=Status.IN_PROGRESS)
+        processing_logger.info(f'{len(file_ids)}件のファイルを処理中に設定しました。')
+
+        for file_id in file_ids:
             try:
-                uploaded_file.status = Status.IN_PROGRESS
-                uploaded_file.save()
-
-                file_path = process_audio(uploaded_file.file.path, uploaded_file.file.name.split(".")[-1])
-                uploaded_file_id = uploaded_file.id
-
-                # 音声文字起こし
-                is_success_transcribe_and_save = transcribe_and_save(file_path, uploaded_file_id)
-
-                uploaded_file = text_generation_save(uploaded_file)
-                processing_logger.info(f"text_generation_saveの戻り値: {uploaded_file}")
-                if not isinstance(uploaded_file, UploadedFile):
-                    uploaded_file.status = Status.ERROR
-                    uploaded_file.save()
-                    processing_logger.error("text_generation_saveが無効な戻り値を返しました。")
+                try:
+                    uploaded_file = UploadedFile.objects.get(id=file_id)
+                except UploadedFile.DoesNotExist:
+                    processing_logger.error(f"ファイルが見つかりませんでした。File ID: {file_id}")
                     continue
 
-                uploaded_file.status = Status.PROCESSED
-                uploaded_file.save()
+                file_path = uploaded_file.file.path
 
-                processing_logger.info(f'正常に文字起こしが完了しました。File ID: {uploaded_file_id}')
+                with transaction.atomic():
+                    transcribe_result = transcribe_and_save(file_path, file_id)
+                    if not transcribe_result:
+                        UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                        processing_logger.error(f"文字起こしに失敗しました。File ID: {file_id}")
+                        continue
+
+                    result = text_generation_save(uploaded_file)
+                    if not isinstance(result, UploadedFile):
+                        raise Exception("テキスト生成に失敗しました")
+
+                    UploadedFile.objects.filter(id=file_id).update(status=Status.PROCESSED)
+
+                processing_logger.info(f'正常に文字起こしが完了しました。File ID: {file_id}')
+
             except Exception as e:
-                uploaded_file.status = Status.UNPROCESSED
-                uploaded_file.save()
-                processing_logger.exception(f"文字起こしでエラーが発生しました。File ID: {uploaded_file_id}")
+                UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                processing_logger.exception(f"文字起こしでエラーが発生しました。File ID: {file_id}")
                 processing_logger.error(f'文字起こしでエラーが発生しました: {e}')
 
         processing_logger.info('全ファイルの文字起こし処理が完了しました。')
