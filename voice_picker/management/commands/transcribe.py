@@ -10,22 +10,27 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     help = '音声ファイルを文字起こしする'
 
-    @transaction.atomic
     def handle(self, *args, **options):
-        # transcriptionを持っていないuploaded_fileを取得
-        uploaded_files = UploadedFile.objects.filter(transcription__isnull=True, status=Status.UNPROCESSED).select_for_update()
+        uploaded_file_ids = list(UploadedFile.objects.filter(
+            transcription__isnull=True, 
+            status=Status.UNPROCESSED
+        ).values_list('id', flat=True))
 
-        if not uploaded_files.exists():
+        if not uploaded_file_ids:
             logger.info('文字起こしするファイルがありませんでした。')
             return
 
-        for uploaded_file in uploaded_files:
+        for uploaded_file_id in uploaded_file_ids:
             try:
-                uploaded_file.status = Status.IN_PROGRESS
-                uploaded_file.save()
+                try:
+                    uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
+                    uploaded_file.status = Status.IN_PROGRESS
+                    uploaded_file.save()
+                except UploadedFile.DoesNotExist:
+                    logger.error(f"ファイルが見つかりませんでした。File ID: {uploaded_file_id}")
+                    continue
 
                 file_path = uploaded_file.file.path
-                uploaded_file_id = uploaded_file.id
 
                 transcribe_and_save_result = transcribe_and_save(file_path, uploaded_file_id)
                 if not transcribe_and_save_result:
@@ -33,21 +38,26 @@ class Command(BaseCommand):
                     uploaded_file.save()
                     continue
 
-                uploaded_file = text_generation_save(uploaded_file)
-                logger.info(f"text_generation_saveの戻り値: {uploaded_file}")
-                if not isinstance(uploaded_file, UploadedFile):
+                result_uploaded_file = text_generation_save(uploaded_file)
+                logger.info(f"text_generation_saveの戻り値: {result_uploaded_file}")
+                if not isinstance(result_uploaded_file, UploadedFile):
                     uploaded_file.status = Status.ERROR
                     uploaded_file.save()
                     logger.error("text_generation_saveが無効な戻り値を返しました。")
                     continue
 
+                uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
                 uploaded_file.status = Status.PROCESSED
                 uploaded_file.save()
 
                 logger.info(f'正常に文字起こしが完了しました。File ID: {uploaded_file_id}')
             except Exception as e:
-                uploaded_file.status = Status.UNPROCESSED
-                uploaded_file.save()
+                try:
+                    uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
+                    uploaded_file.status = Status.UNPROCESSED
+                    uploaded_file.save()
+                except UploadedFile.DoesNotExist:
+                    pass
                 logger.exception(f"文字起こしでエラーが発生しました。File ID: {uploaded_file_id}")
                 logger.error(f'文字起こしでエラーが発生しました: {e}')
 
