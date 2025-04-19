@@ -77,19 +77,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().__init__(*args, **kwargs)
         self.__original_password = None  # 初期化
 
-    def save(self, *args, **kwargs):
-        # パスワードをハッシュ化
-        if self.pk is None or self.password != self.__original_password:
-            self.password = make_password(self.password)
-        super().save(*args, **kwargs)
-
-    def set_password(self, password):
-        self.__original_password = password
-        self.password = password
-
-    def check_password(self, password):
-        return check_password(password, self.password)
-
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = timezone.now()
         self.is_exist = False

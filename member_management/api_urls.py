@@ -16,6 +16,7 @@ urlpatterns = [
     path('token/', csrf_exempt(CustomTokenObtainPairView.as_view()), name='token_obtain_pair'),
     path('token/refresh/', csrf_exempt(TokenRefreshView.as_view()), name='token_refresh'),
     path('users/me/', csrf_exempt(UserViewSet.as_view({'get': 'me'})), name='users_me'),
+    path('users/password-change/', csrf_exempt(UserViewSet.as_view({'post': 'password_change'})), name='password_change'),
 ]
 
 urlpatterns += router.urls
