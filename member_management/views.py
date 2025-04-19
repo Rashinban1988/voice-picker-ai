@@ -83,6 +83,13 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
+    def password_change(self, request):
+        user = request.user
+        if not user.check_password(request.data['current_password']):
+            return Response({'message': '古いパスワードが間違っています'}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(request.data['new_password'])
+        user.save()
+        return Response({'message': 'パスワードを変更しました'})
 
 class EmailVerificationView(View):
     def get(self, request, uidb64):
