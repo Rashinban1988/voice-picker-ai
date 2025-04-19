@@ -9,6 +9,7 @@ from django.utils.http import urlsafe_base64_decode
 from django.conf import settings
 from member_management.models import User
 from member_management.schemas import UserCreateData
+from django.contrib.auth.hashers import make_password
 import logging
 api_logger = logging.getLogger('api')
 
@@ -20,9 +21,9 @@ class UserService:
         """ユーザー作成"""
         return self.organization.users.create(
             username=user_data.email,
-            password=user_data.password,
-            last_name=user_data.sei,
-            first_name=user_data.mei,
+            password=make_password(user_data.password),
+            last_name=user_data.last_name,
+            first_name=user_data.first_name,
             email=user_data.email,
             phone_number=user_data.phone_number,
             is_admin=is_register_view,

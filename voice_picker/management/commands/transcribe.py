@@ -4,8 +4,9 @@ from voice_picker.models import UploadedFile
 from voice_picker.views import transcribe_and_save, text_generation_save
 from voice_picker.models.uploaded_file import Status
 import logging
+from voice_picker.views import process_audio
 
-logger = logging.getLogger(__name__)
+processing_logger = logging.getLogger('processing')
 
 class Command(BaseCommand):
     help = '音声ファイルを文字起こしする'

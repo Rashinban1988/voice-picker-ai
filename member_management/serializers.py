@@ -8,7 +8,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         user.last_login = timezone.now()
-        user.set_password(user.password)
         user.save()
         return token
 

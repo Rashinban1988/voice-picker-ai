@@ -1,0 +1,2 @@
+# 毎時実行
+* * * * * python /code/manage.py transcribe >> /var/log/cron.log 2>&1

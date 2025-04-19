@@ -29,9 +29,9 @@ urlpatterns = [
     path('admin/', admin_site.urls),
     path('voice_picker/', include('voice_picker.urls')),
     path('member_management/', include('member_management.urls')),
-]
 
-urlpatterns += [path('api/', include('member_management.api_urls'))]
+    path('api/', include('config.api_urls')),
+]
 
 if settings.DEBUG:
     urlpatterns += [
