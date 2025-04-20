@@ -482,6 +482,22 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
         processing_logger.error(f"summarize_and_save でエラーが発生しました: {e}")
         return False
 
+def remove_markdown_blocks(text: str) -> str:
+    """
+    Markdown ブロックを除去する。
+
+    Args:
+        text (str): 処理対象のテキスト
+    Returns:
+        str: Markdown ブロックを除去したテキスト
+    """
+    result = text
+    if result.startswith("```markdown\n"):
+        result = result[12:]
+    if result.endswith("\n```"):
+        result = result[:-4]
+    return result.strip()
+
 def summarize_text(text: str) -> str:
     """
     テキストを要約する。
@@ -500,7 +516,7 @@ def summarize_text(text: str) -> str:
             ],
             max_tokens=500  # 応答の最大長を制限
         )
-        return response.choices[0].message.content
+        return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
         processing_logger.error(f"テキスト要約中にエラーが発生しました: {e}")
         return "要約に失敗しました。"
@@ -523,7 +539,7 @@ def definition_issue(text: str) -> str:
             ],
             max_tokens=500  # 応答の最大長を制限
         )
-        return response.choices[0].message.content
+        return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
         processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
         return "分析に失敗しました。"
@@ -546,7 +562,7 @@ def definition_solution(text: str) -> str:
             ],
             max_tokens=500  # 応答の最大長を制限
         )
-        return response.choices[0].message.content
+        return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
         processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
         return "分析に失敗しました。"
@@ -569,7 +585,7 @@ def create_meeting_minutes(text: str) -> str:
             ],
             max_tokens=500  # 応答の最大長を制限
         )
-        return response.choices[0].message.content
+        return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
         processing_logger.error(f"議事録作成中にエラーが発生しました: {e}")
         return "議事録作成に失敗しました。"
