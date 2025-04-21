@@ -35,7 +35,7 @@ class UserService:
         verification_link = reverse('verify_email', kwargs={
             'uidb64': urlsafe_base64_encode(force_bytes(user.pk))
         })
-        message = f'以下のリンクをクリックしてメールアドレスを確認してください:\n{config("APP_HOST")}:{config("APP_PORT")}{verification_link}'
+        message = f'以下のリンクをクリックしてメールアドレスを確認してください:\n{config("APP_HOST")}{config("APP_PORT")}{verification_link}'
 
         send_mail(
             subject=subject,
@@ -54,8 +54,8 @@ class UserService:
                 is_active=True
             )
             if not updated:
-                return redirect(f'{settings.NEXT_JS_HOST}:{settings.NEXT_JS_PORT}/auth/register-failed?error=user_not_found')
+                return redirect(f'{settings.NEXT_JS_HOST}{settings.NEXT_JS_PORT}/auth/register-failed?error=user_not_found')
 
-            return redirect(f'{settings.NEXT_JS_HOST}:{settings.NEXT_JS_PORT}/auth/register-success')
+            return redirect(f'{settings.NEXT_JS_HOST}{settings.NEXT_JS_PORT}/auth/register-success')
         else:
-            return redirect(f'{settings.NEXT_JS_HOST}:{settings.NEXT_JS_PORT}/auth/register-failed?error=invalid_request')
+            return redirect(f'{settings.NEXT_JS_HOST}{settings.NEXT_JS_PORT}/auth/register-failed?error=invalid_request')
