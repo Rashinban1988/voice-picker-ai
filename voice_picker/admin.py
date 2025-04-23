@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import UploadedFile, Transcription
 
 class UploadedFileAdmin(admin.ModelAdmin):
-    list_display = ['id', 'organization_id', 'file', 'summarization','issue','solution','status', 'created_at', 'updated_at', 'deleted_at']
+    list_display = ['id', 'organization_id', 'file', 'duration', 'status', 'summarization', 'issue', 'solution', 'created_at', 'updated_at', 'deleted_at']
     list_filter = ['status', 'organization_id', 'created_at', 'updated_at', 'deleted_at']
     search_fields = ['file', 'organization_id', 'summarization', 'issue', 'solution']
 
