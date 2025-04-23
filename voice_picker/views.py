@@ -6,6 +6,7 @@ import time
 import warnings
 import re
 import webvtt
+from moviepy.editor import VideoFileClip
 # import wave
 
 import numpy as np
@@ -88,6 +89,16 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         api_logger.info(f"UploadedFile list response: {response.data}")
         return response
 
+    def total_duration(self, request, *args, **kwargs):
+        api_logger.info(f"UploadedFile total_duration request: {request.POST}")
+        user = request.user
+        organization = user.organization
+
+        uploaded_files = UploadedFile.objects.filter(organization=organization)
+        total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
+
+        return Response({"total_duration": total_duration})
+
     def create(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile create request: {request.POST}")
 
@@ -105,6 +116,16 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         if file_serializer.is_valid():
             try:
                 uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
+
+                # 動画ファイルの再生時間を取得して保存
+                if uploaded_file.file.name.endswith(('.mp3', '.wav', '.ogg', '.mp4', '.avi', '.mov', '.wmv')):
+                    duration = get_video_duration(uploaded_file.file.path)
+                    if duration is not None:
+                        uploaded_file.duration = duration
+                        uploaded_file.save()
+                        # シリアライザーを再取得
+                        file_serializer = UploadedFileSerializer(uploaded_file)
+
             except Exception as e:
                 django_logger.error(f"ファイル保存中にエラーが発生しました: {e}")
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -589,3 +610,29 @@ def create_meeting_minutes(text: str) -> str:
     except Exception as e:
         processing_logger.error(f"議事録作成中にエラーが発生しました: {e}")
         return "議事録作成に失敗しました。"
+
+def get_video_duration(file_path: str) -> float:
+    """
+    動画・音声ファイルの再生時間を取得する。
+
+    Args:
+        file_path (str): 動画・音声ファイルのパス
+
+    Returns:
+        float: 再生時間（秒）
+    """
+    try:
+        if file_path.endswith(('.mp3', '.wav', '.ogg')):
+            # 音声ファイルの場合
+            audio = AudioSegment.from_file(file_path)
+            duration = len(audio) / 1000.0  # ミリ秒を秒に変換
+            return duration
+        else:
+            # 動画ファイルの場合
+            video = VideoFileClip(file_path)
+            duration = video.duration
+            video.close()
+            return duration
+    except Exception as e:
+        processing_logger.error(f"ファイルの再生時間取得中にエラーが発生しました: {e}")
+        return None
