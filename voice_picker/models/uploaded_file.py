@@ -22,6 +22,7 @@ class UploadedFile(models.Model):
         default=Status.UNPROCESSED,
         verbose_name='ステータス'
     )
+    duration = models.FloatField(null=True, blank=True, verbose_name='再生時間（秒）')  # 再生時間（秒）
     summarization = models.TextField(null=True, blank=True, verbose_name='文書要約結果')  # 文書要約結果
     issue = models.TextField(null=True, blank=True, verbose_name='課題点')  # 課題点
     solution = models.TextField(null=True, blank=True, verbose_name='取り組み案')  # 取り組み案
