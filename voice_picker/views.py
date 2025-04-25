@@ -94,10 +94,15 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user
         organization = user.organization
 
-        uploaded_files = UploadedFile.objects.filter(organization=organization)
+        uploaded_files = UploadedFile.objects.filter(organization=organization, is_exist=True)
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
-
-        return Response({"total_duration": total_duration})
+        
+        max_duration = organization.get_max_duration()
+        
+        return Response({
+            "total_duration": total_duration,
+            "max_duration": max_duration
+        })
 
     def create(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile create request: {request.POST}")

@@ -35,6 +35,21 @@ class Organization(models.Model):
     def uploaded_files(self):
         from voice_picker.models.uploaded_file import UploadedFile
         return UploadedFile.objects.filter(organization=self)
+        
+    def get_subscription(self):
+        """組織のサブスクリプション情報を取得"""
+        from .subscription import Subscription
+        try:
+            return Subscription.objects.get(organization=self)
+        except Subscription.DoesNotExist:
+            return None
+
+    def get_max_duration(self):
+        """組織の最大利用可能時間（分）を取得"""
+        subscription = self.get_subscription()
+        if subscription and subscription.is_active() and subscription.plan:
+            return subscription.plan.max_duration
+        return 100  # デフォルト値
 
     def __str__(self):
         return f"Organization: {self.name}"

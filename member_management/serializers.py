@@ -1,7 +1,7 @@
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Organization, User
+from .models import Organization, User, SubscriptionPlan, Subscription
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -35,3 +35,19 @@ class UserSerializer(serializers.ModelSerializer):
                 'read_only': True,
             }
         }
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPlan
+        fields = ['id', 'name', 'description', 'price', 'max_duration', 'is_active']
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+    
+    class Meta:
+        model = Subscription
+        fields = [
+            'id', 'organization', 'plan', 'status', 
+            'current_period_start', 'current_period_end', 
+            'cancel_at_period_end', 'created_at', 'updated_at'
+        ]
