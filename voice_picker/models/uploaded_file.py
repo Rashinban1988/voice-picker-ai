@@ -29,7 +29,7 @@ class UploadedFile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
-    is_exist = models.BooleanField(default=True, verbose_name='存在')
+    exist = models.BooleanField(default=True, verbose_name='存在')
 
     def transcriptions(self):
         from .transcription import Transcription
@@ -37,12 +37,12 @@ class UploadedFile(models.Model):
 
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = timezone.now()
-        self.is_exist = False
+        self.exist = False
         self.transcriptions.all().delete()
         self.save()
 
     def is_exist(self):
-        return self.is_exist
+        return self.exist
 
     # その他の必要なフィールド
     def __str__(self):

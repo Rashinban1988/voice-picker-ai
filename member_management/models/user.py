@@ -63,7 +63,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
-    is_exist = models.BooleanField(default=True, verbose_name='存在')
+    exist = models.BooleanField(default=True, verbose_name='存在')
 
     # ログイン時に使用するField
     USERNAME_FIELD = 'username'
@@ -79,11 +79,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = timezone.now()
-        self.is_exist = False
+        self.exist = False
         self.save()
 
     def is_exist(self):
-        return self.is_exist
+        return self.exist
 
     def __str__(self):
         return f"{self.last_name} {self.first_name} ({self.email})"
