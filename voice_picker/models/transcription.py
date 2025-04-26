@@ -13,7 +13,7 @@ class Transcription(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
-    is_exist = models.BooleanField(default=True, verbose_name='存在')
+    exist = models.BooleanField(default=True, verbose_name='存在')
 
     def delete(self, using=None, keep_parents=False):
         self.deleted_at = timezone.now()
@@ -21,7 +21,7 @@ class Transcription(models.Model):
         self.save()
 
     def is_exist(self):
-        return self.is_exist
+        return self.exist
 
     # その他の必要なフィールド
     def __str__(self):
