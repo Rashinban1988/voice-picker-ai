@@ -284,30 +284,48 @@ def fulfill_subscription(session):
 def update_subscription(stripe_subscription):
     """サブスクリプション更新時の処理"""
     try:
-        subscription = Subscription.objects.get(
-            stripe_subscription_id=stripe_subscription.id
-        )
+        # まずstripe_subscription_idで検索（既存レコード用）
+        subscription = Subscription.objects.filter(
+            stripe_subscription_id=stripe_subscription['id']
+        ).first()
 
-        if stripe_subscription.status == 'active':
+        # stripe_subscription_idが未登録の場合はstripe_customer_idで検索
+        if not subscription:
+            subscription = Subscription.objects.filter(
+                stripe_customer_id=stripe_subscription['customer']
+            ).first()
+
+        if not subscription:
+            api_logger.error(f"Subscription not found for Stripe subscription ID: {stripe_subscription['id']} or customer ID: {stripe_subscription['customer']}")
+            return
+
+        # サブスクリプションIDを必ず更新
+        subscription.stripe_subscription_id = stripe_subscription['id']
+
+        # ステータス更新
+        if stripe_subscription['status'] == 'active':
             subscription.status = Subscription.Status.ACTIVE
-        elif stripe_subscription.status == 'past_due':
+        elif stripe_subscription['status'] == 'past_due':
             subscription.status = Subscription.Status.PAST_DUE
-        elif stripe_subscription.status == 'canceled':
+        elif stripe_subscription['status'] == 'canceled':
             subscription.status = Subscription.Status.CANCELED
-        elif stripe_subscription.status == 'trialing':
+        elif stripe_subscription['status'] == 'trialing':
             subscription.status = Subscription.Status.TRIAL
+        else:
+            subscription.status = Subscription.Status.INACTIVE
 
+        # 期間情報も更新
         subscription.current_period_start = timezone.datetime.fromtimestamp(
-            stripe_subscription.current_period_start
+            stripe_subscription['current_period_start']
         )
         subscription.current_period_end = timezone.datetime.fromtimestamp(
-            stripe_subscription.current_period_end
+            stripe_subscription['current_period_end']
         )
-        subscription.cancel_at_period_end = stripe_subscription.cancel_at_period_end
+        subscription.cancel_at_period_end = stripe_subscription.get('cancel_at_period_end', False)
         subscription.save()
 
-    except Subscription.DoesNotExist:
-        api_logger.error(f"Subscription not found for Stripe subscription ID: {stripe_subscription.id}")
+    except Exception as e:
+        api_logger.error(f"Error updating subscription: {e}")
 
 
 def cancel_subscription(stripe_subscription):
