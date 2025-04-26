@@ -94,11 +94,11 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user
         organization = user.organization
 
-        uploaded_files = UploadedFile.objects.filter(organization=organization, is_exist=True)
+        uploaded_files = UploadedFile.objects.filter(organization=organization, exist=True)
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
-        
+
         max_duration = organization.get_max_duration()
-        
+
         return Response({
             "total_duration": total_duration,
             "max_duration": max_duration
