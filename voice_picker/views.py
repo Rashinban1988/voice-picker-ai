@@ -22,6 +22,7 @@ from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
@@ -33,6 +34,7 @@ from pyannote.audio import Pipeline
 from pyannote.audio import Audio
 import torchaudio
 from pyannote.audio.pipelines.utils.hook import ProgressHook
+from django.utils import timezone
 
 # 環境変数をロードする
 load_dotenv()
@@ -89,12 +91,20 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         api_logger.info(f"UploadedFile list response: {response.data}")
         return response
 
+    @action(detail=False, methods=['post'])
     def total_duration(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile total_duration request: {request.POST}")
         user = request.user
         organization = user.organization
 
-        uploaded_files = UploadedFile.objects.filter(organization=organization, exist=True)
+        # 今月作成分だけをフィルタリング
+        now = timezone.now()
+        uploaded_files = UploadedFile.objects.filter(
+            organization=organization,
+            exist=True,
+            created_at__year=now.year,
+            created_at__month=now.month
+        )
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
 
         max_duration = organization.get_max_duration()
@@ -123,7 +133,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
 
                 # 動画ファイルの再生時間を取得して保存
-                if uploaded_file.file.name.endswith(('.mp3', '.wav', '.ogg', '.mp4', '.avi', '.mov', '.wmv')):
+                if uploaded_file.file.name.endswith(('.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv')):
                     duration = get_video_duration(uploaded_file.file.path)
                     if duration is not None:
                         uploaded_file.duration = duration
@@ -627,17 +637,19 @@ def get_video_duration(file_path: str) -> float:
         float: 再生時間（秒）
     """
     try:
-        if file_path.endswith(('.mp3', '.wav', '.ogg')):
+        if file_path.endswith(('.mp3', '.wav', '.ogg', '.m4a')):
             # 音声ファイルの場合
             audio = AudioSegment.from_file(file_path)
             duration = len(audio) / 1000.0  # ミリ秒を秒に変換
             return duration
-        else:
+        elif file_path.endswith(('.mp4', '.avi', '.mov', '.wmv')):
             # 動画ファイルの場合
             video = VideoFileClip(file_path)
             duration = video.duration
             video.close()
             return duration
+        else:
+            return None
     except Exception as e:
         processing_logger.error(f"ファイルの再生時間取得中にエラーが発生しました: {e}")
         return None

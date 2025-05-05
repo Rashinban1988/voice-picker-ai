@@ -8,6 +8,7 @@ class UploadedFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UploadedFile
         fields = '__all__'
+        read_only_fields = ['organization', 'created_at', 'updated_at', 'deleted_at', 'exist']
 
 class TranscriptionSerializer(serializers.ModelSerializer):
     uploaded_file = serializers.PrimaryKeyRelatedField(queryset=UploadedFile.objects.all())
@@ -15,3 +16,4 @@ class TranscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transcription
         fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'deleted_at', 'exist']
