@@ -87,11 +87,13 @@ class UserViewSet(viewsets.ModelViewSet):
             api_logger.error(f"User registration email sending failed: {e}")
             raise
 
+    @action(detail=False, methods=['get'])
     def me(self, request):
         # 現在のユーザーの情報のみをシリアライズして返す
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'])
     def password_change(self, request):
         user = request.user
         if not user.check_password(request.data['current_password']):

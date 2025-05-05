@@ -35,19 +35,22 @@ class UserSerializer(serializers.ModelSerializer):
                 'read_only': True,
             }
         }
+        read_only_fields = ['created_at', 'updated_at', 'deleted_at', 'exist']
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan
         fields = ['id', 'name', 'description', 'price', 'max_duration', 'is_active']
+        read_only_fields = ['created_at', 'updated_at', 'deleted_at', 'exist']
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan = SubscriptionPlanSerializer(read_only=True)
-    
+
     class Meta:
         model = Subscription
         fields = [
-            'id', 'organization', 'plan', 'status', 
-            'current_period_start', 'current_period_end', 
+            'id', 'organization', 'plan', 'status',
+            'current_period_start', 'current_period_end',
             'cancel_at_period_end', 'created_at', 'updated_at'
         ]
+        read_only_fields = ['created_at', 'updated_at', 'deleted_at', 'exist']
