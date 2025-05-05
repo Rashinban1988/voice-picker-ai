@@ -273,7 +273,7 @@ def process_audio(file_path, file_extension):
     if not os.path.exists(new_file_path):
         raise FileNotFoundError(f"エクスポートされたファイルが見つかりません: {new_file_path}")
 
-    return new_file_path
+    return new_file_path, ".wav"
 
 def millisec(timeStr):
     """
