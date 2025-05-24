@@ -293,3 +293,9 @@ LOGGING = {
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# セキュリティヘッダーの設定
+SECURE_CONTENT_TYPE_NOSNIFF = True  # X-Content-Type-Options: nosniff
+X_FRAME_OPTIONS = 'DENY'            # X-Frame-Options: DENY
+SECURE_BROWSER_XSS_FILTER = True    # X-XSS-Protection: 1; mode=block
+
