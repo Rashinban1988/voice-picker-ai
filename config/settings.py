@@ -10,11 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+# Django
 import os
 from pathlib import Path
-from decouple import config
 from datetime import timedelta
+# Local imports
 from .logging_handlers import DailyRotatingFileHandler
+# Third-party
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,15 +31,28 @@ NEXT_JS_HOST = config('NEXT_JS_HOST')
 NEXT_JS_PORT = config('NEXT_JS_PORT')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=False)
+DEBUG = config('DEBUG', default=False, cast=bool)
+# 開発サーバーの設定最適化
+if DEBUG:
+    # 自動リロードの監視対象を制限
+    DJANGO_AUTORELOAD_IGNORE = [
+        '*.pyc',
+        '*.pyo',
+        '*.pyd',
+        '.git',
+        '.hg',
+        '.svn',
+        'node_modules',
+        'static',
+        'media',
+        'logs',
+    ]
 
-ALLOWED_HOSTS = [
-    'voice-picker-ai.com',
-    '85.131.245.70',
-    '127.0.0.1',
-    'localhost',
-    '*',
-]
+    # 自動リロードの間隔を短縮（デフォルトは1秒）
+    DJANGO_AUTORELOAD_INTERVAL = 0.5
+
+allowed_hosts = config('ALLOWED_HOSTS', default='*')
+ALLOWED_HOSTS = allowed_hosts.split(',')
 
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
@@ -121,6 +137,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            'debug': DEBUG,
         },
     },
 ]
@@ -293,3 +310,8 @@ LOGGING = {
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# セキュリティヘッダーの設定
+SECURE_CONTENT_TYPE_NOSNIFF = True  # X-Content-Type-Options: nosniff
+X_FRAME_OPTIONS = 'DENY'            # X-Frame-Options: DENY
+SECURE_BROWSER_XSS_FILTER = True    # X-XSS-Protection: 1; mode=block
