@@ -59,3 +59,48 @@ class UserService:
             return redirect(f'{settings.NEXT_JS_HOST}/auth/register-success')
         else:
             return redirect(f'{settings.NEXT_JS_HOST}/auth/register-failed?error=invalid_request')
+
+    @staticmethod
+    def increment_login_attempts(user: User) -> None:
+        """ログイン試行回数を増やす"""
+        user.login_attempts += 1
+        if user.login_attempts >= 10:
+            user.locked_until = timezone.now() + timezone.timedelta(minutes=30)
+        user.save()
+        api_logger.info(f"Login attempts incremented for user {user.email}. Current attempts: {user.login_attempts}")
+
+    @staticmethod
+    def reset_login_attempts(user: User) -> None:
+        """ログイン試行回数をリセット"""
+        user.login_attempts = 0
+        user.locked_until = None
+        user.save()
+        api_logger.info(f"Login attempts reset for user {user.email}")
+
+    @staticmethod
+    def is_locked(user: User) -> bool:
+        """アカウントがロックされているか確認"""
+        if user.locked_until and timezone.now() < user.locked_until:
+            return True
+        if user.locked_until and timezone.now() >= user.locked_until:
+            UserService.reset_login_attempts(user)
+        return False
+
+    @staticmethod
+    def send_two_factor_code(user: User, code: str) -> None:
+        """2要素認証コードを送信"""
+        if user.two_factor_method == 'email':
+            subject = '【Voice Picker AI】認証コード'
+            message = f'認証コード: {code}'
+
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+            api_logger.info(f"Two-factor code sent via email to {user.email}")
+        else:  # SMS
+            # SMS送信の実装（Twilio等のサービスを使用）
+            api_logger.info(f"Two-factor code sent via SMS to {user.phone_number}")
