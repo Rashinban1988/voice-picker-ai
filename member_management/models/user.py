@@ -60,6 +60,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     token = models.CharField(max_length=255, null=True, blank=True, verbose_name='トークン')
 
+    # 2要素認証関連のフィールド
+    two_factor_enabled = models.BooleanField(default=False, verbose_name='2要素認証有効')
+    two_factor_method = models.CharField(
+        max_length=10,
+        choices=[('email', 'メール'), ('sms', 'SMS')],
+        default='email',
+        verbose_name='2要素認証方法'
+    )
+
+    # アカウントロック関連のフィールド
+    login_attempts = models.IntegerField(default=0, verbose_name='ログイン試行回数')
+    locked_until = models.DateTimeField(null=True, blank=True, verbose_name='ロック解除時刻')
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')

@@ -120,7 +120,78 @@ class EmailVerificationView(View):
             return JsonResponse({'message': 'メール認証に失敗しました'}, status=status.HTTP_400_BAD_REQUEST)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+
+        if response.status_code == 200:
+            username = request.data.get('username')
+            user = User.objects.get(username=username)
+
+            if UserService.is_locked(user):
+                return JsonResponse(
+                    {'message': 'アカウントがロックされています。30分後に再試行してください。'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if user.two_factor_enabled:
+                two_factor_code = ''.join(random.choices(string.digits, k=6))
+                random_key = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
+                two_factor_cache_key = f"2fa_{random_key}"
+                cache.set(two_factor_cache_key, {
+                    'two_factor_code': two_factor_code,
+                    'timestamp': timezone.now().timestamp()
+                }, timeout=300)
+
+                UserService.send_two_factor_code(user, two_factor_code)
+
+                return JsonResponse({
+                    'message': '2要素認証が必要です',
+                    'requires_two_factor': True,
+                    'two_factor_method': user.two_factor_method,
+                    'key': two_factor_cache_key,
+                    'access': response.data.get('access'),
+                    'refresh': response.data.get('refresh')
+                }, status=status.HTTP_200_OK)
+
+            UserService.reset_login_attempts(user)
+            return response
+
+        try:
+            user = User.objects.get(username=request.data.get('username'))
+            UserService.increment_login_attempts(user)
+        except User.DoesNotExist:
+            pass
+
+        return response
+
+class TwoFactorVerifyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            two_factor_code = data.get('code')
+            two_factor_cache_key = data.get('key')
+        except json.JSONDecodeError:
+            return JsonResponse({'message': '認証情報が無効です'}, status=status.HTTP_400_BAD_REQUEST)
+
+        stored_data = cache.get(two_factor_cache_key)
+        if not stored_data:
+            return JsonResponse({'message': '認証情報が無効です'}, status=status.HTTP_400_BAD_REQUEST)
+
+        stored_two_factor_code = stored_data.get('two_factor_code')
+        expiration_time = stored_data.get('timestamp')
+
+        if timezone.now().timestamp() - expiration_time > 300:
+            cache.delete(two_factor_cache_key)
+            return JsonResponse({'message': '認証コードの有効期限が切れています'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if two_factor_code == stored_two_factor_code:
+            UserService.reset_login_attempts(request.user)
+            cache.delete(two_factor_cache_key)
+            return JsonResponse({'message': '認証成功'},status=status.HTTP_200_OK)
+
+        return JsonResponse({'message': '認証コードが間違っています'}, status=status.HTTP_400_BAD_REQUEST)
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = SubscriptionPlan.objects.filter(is_active=True)
