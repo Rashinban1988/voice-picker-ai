@@ -1,3 +1,4 @@
+# Django
 from django.db import transaction
 from django.http import JsonResponse, HttpResponse
 from django.views import View
@@ -5,21 +6,30 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.conf import settings
-from rest_framework import status
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework import viewsets
+from django.core.cache import cache
+# Django REST Framework
+from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.views import TokenObtainPairView
+# Local imports
 from member_management.services import UserService, OrganizationService
 from .serializers import (
-    CustomTokenObtainPairSerializer, OrganizationSerializer, UserSerializer,
-    SubscriptionPlanSerializer, SubscriptionSerializer
+    OrganizationSerializer,
+    UserSerializer,
+    SubscriptionPlanSerializer,
+    SubscriptionSerializer
 )
 from .models import User, Organization, SubscriptionPlan, Subscription
 from .schemas import UserCreateData, OrganizationCreateData
-
+# Standard library
 import json
 import logging
+import random
+import string
+# Third-party
 import stripe
 
 api_logger = logging.getLogger('django')
