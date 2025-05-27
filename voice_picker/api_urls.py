@@ -7,6 +7,7 @@ router = routers.DefaultRouter()
 
 urlpatterns = [
     path('upload-files/total-duration/', csrf_exempt(UploadedFileViewSet.as_view({'post': 'total_duration'})), name='total_duration'),
+    path('upload-files/audio/<uuid:pk>/', csrf_exempt(UploadedFileViewSet.as_view({'get': 'audio'})), name='audio'),
 ]
 
 urlpatterns += router.urls

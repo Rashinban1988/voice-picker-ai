@@ -1,11 +1,13 @@
 import json
 import logging
+import mimetypes
 from openai import OpenAI
 import os
 import time
 import warnings
 import re
 import webvtt
+import uuid
 from moviepy.editor import VideoFileClip
 # import wave
 
@@ -14,7 +16,7 @@ import noisereduce as nr
 from functools import lru_cache
 # from celery import shared_task
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views import View
 from dotenv import load_dotenv
 from pydub import AudioSegment
@@ -35,6 +37,7 @@ from pyannote.audio import Audio
 import torchaudio
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 from django.utils import timezone
+from rest_framework.renderers import StaticHTMLRenderer
 
 # 環境変数をロードする
 load_dotenv()
@@ -114,6 +117,43 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             "max_duration": max_duration
         })
 
+    @action(detail=False, methods=['get'])
+    def audio(self, request, *args, **kwargs):
+        """
+        音声ファイルのデータを取得する。
+        """
+        api_logger.info(f"UploadedFile audio request: {request.GET}")
+        user = request.user
+        organization = user.organization
+
+        if not organization:
+            api_logger.error("organization_idがない")
+            return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
+
+        queryset = UploadedFile.objects.filter(organization=organization)
+        queryset = queryset.filter(id=kwargs['pk'])
+
+        if not queryset.exists():
+            api_logger.error("UploadedFileが見つかりません")
+            return Response({"detail": "UploadedFileが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
+
+        instance = queryset.first()
+        file_path = instance.file.path
+
+        if not os.path.exists(file_path):
+            return Response({"detail": "ファイルが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
+
+        file_extension = os.path.splitext(file_path)[1].lower()
+        if file_extension not in ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']:
+            return Response({"detail": "音声ファイルではありません"}, status=status.HTTP_400_BAD_REQUEST)
+
+        content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+        response = HttpResponse(open(file_path, 'rb').read(), content_type=content_type)
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+
+        api_logger.info(f"UploadedFile audio response: file sent")
+        return response
+
     def create(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile create request: {request.POST}")
 
@@ -154,6 +194,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             django_logger.info(f"ファイルアップロードに失敗しました: {file_serializer.errors}")
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['get'])
     def retrieve(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile retrieve request: {request.GET}")
         instance = self.get_object()
