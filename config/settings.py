@@ -52,10 +52,14 @@ if DEBUG:
     DJANGO_AUTORELOAD_INTERVAL = 0.5
 
 allowed_hosts = config('ALLOWED_HOSTS', default='*')
-ALLOWED_HOSTS = allowed_hosts.split(',')
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts.split(',')]
 
-CORS_ORIGIN_ALLOW_ALL = True
-CORS_ALLOW_CREDENTIALS = True
+CORS_ORIGIN_ALLOW_ALL = config('CORS_ORIGIN_ALLOW_ALL', default=True, cast=bool)
+CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=bool)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",        # 開発時
+    "https://voice-picker.ai.com",  # 本番フロント
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -238,7 +242,7 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 
 # voice-pickerファイルアップロード設定-----------------------------------------------------------------------
-MEDIA_URL = '/media/'
+MEDIA_URL = ''
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ログ設定------------------------------------------------------------------------------------------------
