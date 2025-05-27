@@ -144,7 +144,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return Response({"detail": "ファイルが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
 
         file_extension = os.path.splitext(file_path)[1].lower()
-        if file_extension not in ['.mp3', '.wav', '.ogg', '.m4a']:
+        if file_extension not in ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']:
             return Response({"detail": "音声ファイルではありません"}, status=status.HTTP_400_BAD_REQUEST)
 
         content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
