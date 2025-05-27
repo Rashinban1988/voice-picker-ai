@@ -5,7 +5,7 @@ import os
 
 class UploadedFileSerializer(serializers.ModelSerializer):
     organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all(), required=False)
-    file = serializers.SerializerMethodField()
+    file = serializers.FileField()
 
     class Meta:
         model = UploadedFile
