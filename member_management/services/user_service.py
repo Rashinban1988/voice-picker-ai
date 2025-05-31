@@ -70,7 +70,7 @@ class UserService:
         send_mail(
             subject=UserService.EMAIL_SUBJECT_VERIFICATION,
             message=message,
-            from_email=config("EMAIL_HOST_FROM"),
+            from_email=f"{config('EMAIL_HOST_FROM')}",
             recipient_list=[user.email],
             fail_silently=False,
         )
@@ -169,7 +169,7 @@ class UserService:
             send_mail(
                 subject=UserService.EMAIL_SUBJECT_2FA,
                 message=message,
-                from_email=config("EMAIL_HOST_USER"),
+                from_email=f"{config('EMAIL_HOST_USER')}",
                 recipient_list=[user.email],
                 fail_silently=False,
             )
