@@ -5,11 +5,15 @@ services:
     extra_hosts:
       - host.docker.internal:host-gateway
     platform: linux/amd64
-    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --noreload" # デバッグ無
-    # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --reload" # デバッグ無
-    # command: sh -c "cron -f & echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT}" # デバッグ有
+    # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --noreload" # デバッグ無
+    # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --noreload" # デバッグ無
+    # command: sh -c "cron -f & echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT} --noreload --nothreading" # デバッグ有
+    # command: sh -c "cron -f & python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT} --nothreading"
+    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --nothreading"
     volumes:
       - .:/code
+    environment:
+      - DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}"
     networks:
       - webdev
     ports:
