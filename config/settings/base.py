@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 # Local imports
-from .logging_handlers import DailyRotatingFileHandler
+from config.logging_handlers import DailyRotatingFileHandler
 # Third-party
 from decouple import config
 
@@ -32,24 +32,9 @@ NEXT_JS_PORT = config('NEXT_JS_PORT')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
-# 開発サーバーの設定最適化
-if DEBUG:
-    # 自動リロードの監視対象を制限
-    DJANGO_AUTORELOAD_IGNORE = [
-        '*.pyc',
-        '*.pyo',
-        '*.pyd',
-        '.git',
-        '.hg',
-        '.svn',
-        'node_modules',
-        'static',
-        'media',
-        'logs',
-    ]
-
-    # 自動リロードの間隔を短縮（デフォルトは1秒）
-    DJANGO_AUTORELOAD_INTERVAL = 0.5
+# SpeechBrainの設定を最適化
+SPEECHBRAIN_DEV_MODE = True  # 開発モードを有効化
+SPEECHBRAIN_DISABLE_QUIRKS = True  # 不要な機能を無効化
 
 allowed_hosts = config('ALLOWED_HOSTS', default='*')
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts.split(',')]
@@ -59,6 +44,10 @@ CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=boo
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",        # 開発時
     "https://voice-picker.ai.com",  # 本番フロント
+    "https://django.voice-picker.ai.com",
+]
+CSRF_TRUSTED_ORIGINS = [
+    "https://django.voice-picker.ai.com",
 ]
 
 # Application definition
@@ -237,6 +226,7 @@ EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.conso
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=2525)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='debug@debug.com')
+EMAIL_HOST_FROM = config('EMAIL_HOST_FROM', default='debug@debug.com')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
@@ -311,6 +301,7 @@ LOGGING = {
 }
 # ------------------------------------------------------------------------------------------------
 
+# Stripeの設定
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
