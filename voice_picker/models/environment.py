@@ -1,16 +1,15 @@
-
 from django.db import models
 from .uploaded_file import UploadedFile
 from django.utils import timezone
 import uuid
+from django.utils.translation import gettext_lazy as _
 
 class Environment(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(_('code'), max_length=50, primary_key=True, verbose_name='コード')
+    """環境設定を管理するモデル"""
+    code = models.CharField(_('code'), max_length=50, unique=True, verbose_name='コード')
     value = models.TextField(_('value'), blank=True, null=True, verbose_name='値')
-
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True, verbose_name='作成日時')
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
     exist = models.BooleanField(default=True, verbose_name='存在')
 
@@ -23,7 +22,9 @@ class Environment(models.Model):
         return self.exist
 
     def __str__(self):
-        return self.name
+        return f"{self.code}: {self.value}"
 
     class Meta:
-        verbose_name = '環境'
+        verbose_name = _('environment')
+        verbose_name_plural = _('environments')
+        ordering = ['-updated_at']
