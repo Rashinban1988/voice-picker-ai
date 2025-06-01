@@ -24,7 +24,7 @@ from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
+from rest_framework.decorators import action, csrf_exempt
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
@@ -62,6 +62,11 @@ def get_whisper_model():
     whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
+
+@lru_cache(maxsize=1)
+def get_diarization_model():
+    diarization_model = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
+    return diarization_model
 
 class UploadedFileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
@@ -221,6 +226,44 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(uploaded_file__id=uploadedfile_id)
         api_logger.info(f"TranscriptionViewSet get_queryset response: {queryset}")
         return queryset
+
+    @csrf_exempt
+    @action(detail=False, methods=['post'])
+    def save_transcriptions(self, request, *args, **kwargs):
+        """
+        文字起こし結果を一括で保存するエンドポイント
+        """
+        api_logger.info(f"TranscriptionViewSet save_transcriptions request: {request.data}")
+
+        try:
+            transcriptions = request.data.get('transcriptions')
+            uploaded_file_id = request.data.get('uploaded_file_id')
+
+            if not uploaded_file_id:
+                return Response(
+                    {"error": "uploaded_file_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            for transcription in transcriptions:
+                save_transcription(
+                    transcription_text=transcription.get('text'),
+                    start=transcription.get('start'),
+                    uploaded_file_id=uploaded_file_id,
+                    speaker=transcription.get('speaker')
+                )
+
+            return Response(
+                {"message": "Transcriptions saved successfully"},
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            api_logger.error(f"Error saving transcriptions: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class TranscribeView(View):
     def get(self, request, *args, **kwargs):
