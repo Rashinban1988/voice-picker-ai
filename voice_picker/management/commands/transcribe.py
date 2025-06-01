@@ -1,10 +1,11 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from voice_picker.models import UploadedFile
+from voice_picker.models import UploadedFile, Environment
 from voice_picker.views import transcribe_and_save, text_generation_save
 from voice_picker.models.uploaded_file import Status
 import logging
-from voice_picker.views import process_audio
+import requests
+import os
 
 processing_logger = logging.getLogger('processing')
 
@@ -12,6 +13,17 @@ class Command(BaseCommand):
     help = '音声ファイルを文字起こしする'
 
     def handle(self, *args, **options):
+        # ngrokのエンドポイントを取得
+        try:
+            environment = Environment.objects.get(code='ngrok')
+            ngrok_endpoint = environment.value
+            if not ngrok_endpoint:
+                processing_logger.error('ngrokのエンドポイントが設定されていません。')
+                return
+        except Environment.DoesNotExist:
+            processing_logger.error('ngrokのエンドポイントが設定されていません。')
+            return
+
         unprocessed_files = UploadedFile.objects.filter(
             transcription__isnull=True,
             status=Status.UNPROCESSED
@@ -35,18 +47,40 @@ class Command(BaseCommand):
 
                 file_path = uploaded_file.file.path
 
-                with transaction.atomic():
-                    transcribe_result = transcribe_and_save(file_path, file_id)
-                    if not transcribe_result:
-                        UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
-                        processing_logger.error(f"文字起こしに失敗しました。File ID: {file_id}")
-                        continue
+                organization = uploaded_file.organization
+                # if organization == '通常会員の場合':
+                #     with transaction.atomic():
+                #         transcribe_result = transcribe_and_save(file_path, file_id)
+                #         if not transcribe_result:
+                #             UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                #             processing_logger.error(f"文字起こしに失敗しました。File ID: {file_id}")
+                #             continue
 
-                    result = text_generation_save(uploaded_file)
-                    if not isinstance(result, UploadedFile):
-                        raise Exception("テキスト生成に失敗しました")
+                #         result = text_generation_save(uploaded_file)
+                #         if not isinstance(result, UploadedFile):
+                #             raise Exception("テキスト生成に失敗しました")
 
-                    UploadedFile.objects.filter(id=file_id).update(status=Status.PROCESSED)
+                #         UploadedFile.objects.filter(id=file_id).update(status=Status.PROCESSED)
+
+                # 有料会員の場合
+                try:
+                    # ファイルを読み込む
+                    with open(file_path, 'rb') as f:
+                        files = {
+                            'file': (os.path.basename(file_path), f, 'application/octet-stream')
+                        }
+                        data = {
+                            'uploaded_file_id': str(uploaded_file.id)
+                        }
+                        response = requests.post(
+                            f"{ngrok_endpoint}/process",
+                            files=files,
+                            data=data
+                        )
+                    response.raise_for_status()
+                    processing_logger.info(f'ngrokエンドポイントへの通知が成功しました。File ID: {file_id}')
+                except requests.exceptions.RequestException as e:
+                    processing_logger.error(f'ngrokエンドポイントへの通知に失敗しました。File ID: {file_id}, Error: {e}')
 
                 processing_logger.info(f'正常に文字起こしが完了しました。File ID: {file_id}')
 

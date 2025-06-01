@@ -24,14 +24,14 @@ from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
+from rest_framework.decorators import action, csrf_exempt
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
 import torch
 import whisper
-from .models import Transcription, UploadedFile
-from .serializers import TranscriptionSerializer, UploadedFileSerializer
+from .models import Transcription, UploadedFile, Environment
+from .serializers import TranscriptionSerializer, UploadedFileSerializer, EnvironmentSerializer
 from pyannote.audio import Pipeline
 from pyannote.audio import Audio
 import torchaudio
@@ -62,6 +62,31 @@ def get_whisper_model():
     whisper_model = whisper.load_model("small").to(device)
 
     return whisper_model
+
+@lru_cache(maxsize=1)
+def get_diarization_model():
+    diarization_model = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
+    return diarization_model
+
+class EnvironmentViewSet(viewsets.ModelViewSet):
+    queryset = Environment.objects.all()
+    serializer_class = EnvironmentSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'code'
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = Environment.objects.get(code=kwargs['code'])
+            serializer = self.get_serializer(instance, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        except Environment.DoesNotExist:
+            # 存在しない場合は新規作成
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(code=kwargs['code'])
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class UploadedFileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
@@ -222,6 +247,44 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         api_logger.info(f"TranscriptionViewSet get_queryset response: {queryset}")
         return queryset
 
+    @csrf_exempt
+    @action(detail=False, methods=['post'])
+    def save_transcriptions(self, request, *args, **kwargs):
+        """
+        文字起こし結果を一括で保存するエンドポイント
+        """
+        api_logger.info(f"TranscriptionViewSet save_transcriptions request: {request.data}")
+
+        try:
+            transcriptions = request.data.get('transcriptions')
+            uploaded_file_id = request.data.get('uploaded_file_id')
+
+            if not uploaded_file_id:
+                return Response(
+                    {"error": "uploaded_file_id is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            for transcription in transcriptions:
+                save_transcription(
+                    transcription_text=transcription.get('text'),
+                    start=transcription.get('start'),
+                    uploaded_file_id=uploaded_file_id,
+                    speaker=transcription.get('speaker')
+                )
+
+            return Response(
+                {"message": "Transcriptions saved successfully"},
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            api_logger.error(f"Error saving transcriptions: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class TranscribeView(View):
     def get(self, request, *args, **kwargs):
         api_logger.info(f"TranscribeView get request: {request.GET}")
@@ -268,35 +331,35 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
-    # 音声の正規化
-    audio = audio.normalize()
+        # 音声の正規化
+        audio = audio.normalize()
 
-    # ノイズ除去
-    samples = np.array(audio.get_array_of_samples())
-    reduced_noise = nr.reduce_noise(
-        y=samples, # 音声データ
-        sr=audio.frame_rate, # サンプリングレート
-        # ノイズ除去のパラメータ
-        prop_decrease=0.5, # ノイズを減少させる割合、1だと音声も減少する可能性がある
-        time_constant_s=4, # 室内など一定のノイズの場合は大きいほどノイズが減少する、屋外などノイズが変動する場合は小さいほどノイズが減少する
+        # ノイズ除去
+        samples = np.array(audio.get_array_of_samples())
+        reduced_noise = nr.reduce_noise(
+            y=samples,
+            sr=audio.frame_rate,
+            prop_decrease=0.5,
+            time_constant_s=4,
+            freq_mask_smooth_hz=500,
+            time_mask_smooth_ms=50,
+            thresh_n_mult_nonstationary=1.5,
+            sigmoid_slope_nonstationary=15,
+            n_std_thresh_stationary=1.5,
+            clip_noise_stationary=True,
+            use_tqdm=False,
+            n_jobs=1,
+            use_torch=True,
+            device="cuda"
+        )
 
-        freq_mask_smooth_hz=500, # 音声に影響が出ないのは500Hz以下
-        time_mask_smooth_ms=50, # 短い音声では50ms以下、長い音声では100ms以上
-        thresh_n_mult_nonstationary=1.5, # 屋外などノイズが変動する場合は大きいほどノイズが減少する、室内のおすすめは1.5
-        sigmoid_slope_nonstationary=15, # 非定常ノイズのシグモイドの傾き、音声の場合は10以上
-        n_std_thresh_stationary=1.5, # 定常ノイズの標準偏差の閾値、大きいほどノイズが減少する、音声の場合は1.5
-        clip_noise_stationary=True, # 定常ノイズをクリップするかどうか、Trueだと音声も減少する可能性がある
-        use_tqdm=False, # 進捗バーを表示するかどうか、処理速度に影響する
-        n_jobs=2, # 並列処理の数、1だとシリアル処理
-        use_torch=False, # テンソルを使用するかどうか、Trueだと処理速度が速い（GPUを使用する場合はTrue）
-        device="cpu" # デバイスを指定、GPUを使用する場合は"cuda"、CPUを使用する場合は"cpu"
-    )
-    audio = AudioSegment(
-        reduced_noise.tobytes(),
-        frame_rate=audio.frame_rate,
-        sample_width=audio.sample_width,
-        channels=audio.channels
-    )
+        # 音声データの再構築
+        audio = AudioSegment(
+            reduced_noise.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=audio.channels
+        )
 
     # 音声の正規化
     # audio = audio.normalize()

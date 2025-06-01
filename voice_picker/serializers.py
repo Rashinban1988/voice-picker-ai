@@ -1,7 +1,13 @@
 from rest_framework import serializers
-from .models import UploadedFile, Transcription
+from .models import UploadedFile, Transcription, Environment
 from member_management.models import Organization
 import os
+
+class EnvironmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Environment
+        fields = ['id', 'code', 'value', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 class UploadedFileSerializer(serializers.ModelSerializer):
     organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all(), required=False)
