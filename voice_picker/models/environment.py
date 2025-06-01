@@ -6,10 +6,11 @@ from django.utils.translation import gettext_lazy as _
 
 class Environment(models.Model):
     """環境設定を管理するモデル"""
-    code = models.CharField(_('code'), max_length=50, unique=True, verbose_name='コード')
-    value = models.TextField(_('value'), blank=True, null=True, verbose_name='値')
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True, verbose_name='作成日時')
-    updated_at = models.DateTimeField(_('updated at'), auto_now=True, verbose_name='更新日時')
+    code = models.CharField(max_length=50, unique=True, verbose_name='コード')
+    value = models.TextField(blank=True, null=True, verbose_name='値')
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
     exist = models.BooleanField(default=True, verbose_name='存在')
 
