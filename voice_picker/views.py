@@ -331,35 +331,35 @@ def process_audio(file_path, file_extension):
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
 
-        # 音声の正規化
-        audio = audio.normalize()
+    # 音声の正規化
+    audio = audio.normalize()
 
-        # ノイズ除去
-        samples = np.array(audio.get_array_of_samples())
-        reduced_noise = nr.reduce_noise(
-            y=samples,
-            sr=audio.frame_rate,
-            prop_decrease=0.5,
-            time_constant_s=4,
-            freq_mask_smooth_hz=500,
-            time_mask_smooth_ms=50,
-            thresh_n_mult_nonstationary=1.5,
-            sigmoid_slope_nonstationary=15,
-            n_std_thresh_stationary=1.5,
-            clip_noise_stationary=True,
-            use_tqdm=False,
-            n_jobs=1,
-            use_torch=True,
-            device="cuda"
-        )
+    # ノイズ除去
+    samples = np.array(audio.get_array_of_samples())
+    reduced_noise = nr.reduce_noise(
+        y=samples,
+        sr=audio.frame_rate,
+        prop_decrease=0.5,
+        time_constant_s=4,
+        freq_mask_smooth_hz=500,
+        time_mask_smooth_ms=50,
+        thresh_n_mult_nonstationary=1.5,
+        sigmoid_slope_nonstationary=15,
+        n_std_thresh_stationary=1.5,
+        clip_noise_stationary=True,
+        use_tqdm=False,
+        n_jobs=1,
+        use_torch=True,
+        device="cuda"
+    )
 
-        # 音声データの再構築
-        audio = AudioSegment(
-            reduced_noise.tobytes(),
-            frame_rate=audio.frame_rate,
-            sample_width=audio.sample_width,
-            channels=audio.channels
-        )
+    # 音声データの再構築
+    audio = AudioSegment(
+        reduced_noise.tobytes(),
+        frame_rate=audio.frame_rate,
+        sample_width=audio.sample_width,
+        channels=audio.channels
+    )
 
     # 音声の正規化
     # audio = audio.normalize()
