@@ -24,7 +24,8 @@ from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action, csrf_exempt
+from rest_framework.decorators import action
+from django.views.decorators.csrf import csrf_exempt
 from typing import Union
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
