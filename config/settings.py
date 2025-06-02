@@ -43,11 +43,11 @@ CORS_ORIGIN_ALLOW_ALL = config('CORS_ORIGIN_ALLOW_ALL', default=True, cast=bool)
 CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=bool)
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",        # 開発時
-    "https://voice-picker.ai.com",  # 本番フロント
-    "https://django.voice-picker.ai.com",
+    "https://voice-picker-ai.com",  # 本番フロント
+    "https://django.voice-picker-ai.com",
 ]
 CSRF_TRUSTED_ORIGINS = [
-    "https://django.voice-picker.ai.com",
+    "https://django.voice-picker-ai.com",
 ]
 
 # Application definition
