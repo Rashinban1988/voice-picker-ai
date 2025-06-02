@@ -249,13 +249,15 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         api_logger.info(f"TranscriptionViewSet get_queryset response: {queryset}")
         return queryset
 
-    @csrf_exempt
-    @action(detail=False, methods=['post'], permission_classes=[])
+class TranscriptionSaveViewSet(viewsets.ViewSet):
+    permission_classes = []
+
+    @action(detail=False, methods=['post'])
     def save_transcriptions(self, request, *args, **kwargs):
         """
         文字起こし結果を一括で保存するエンドポイント
         """
-        api_logger.info(f"TranscriptionViewSet save_transcriptions request: {request.data}")
+        api_logger.info(f"TranscriptionSaveViewSet save_transcriptions request: {request.data}")
 
         try:
             transcriptions = request.data.get('transcriptions')
