@@ -250,7 +250,7 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         return queryset
 
     @csrf_exempt
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], permission_classes=[])
     def save_transcriptions(self, request, *args, **kwargs):
         """
         文字起こし結果を一括で保存するエンドポイント
