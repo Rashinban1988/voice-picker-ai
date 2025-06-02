@@ -75,6 +75,7 @@ class EnvironmentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'code'
 
+    @action(detail=False, methods=['post'])
     def update(self, request, *args, **kwargs):
         try:
             instance = Environment.objects.get(code=kwargs['code'])
