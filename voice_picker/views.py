@@ -72,7 +72,7 @@ def get_diarization_model():
 class EnvironmentViewSet(viewsets.ModelViewSet):
     queryset = Environment.objects.all()
     serializer_class = EnvironmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
     lookup_field = 'code'
 
     @action(detail=False, methods=['post'])
