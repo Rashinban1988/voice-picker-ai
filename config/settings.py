@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 # Local imports
-from config.logging_handlers import DailyRotatingFileHandler
+from .logging_handlers import DailyRotatingFileHandler
 # Third-party
 from decouple import config
 
@@ -39,16 +39,55 @@ SPEECHBRAIN_DISABLE_QUIRKS = True  # 不要な機能を無効化
 allowed_hosts = config('ALLOWED_HOSTS', default='*')
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts.split(',')]
 
-CORS_ORIGIN_ALLOW_ALL = config('CORS_ORIGIN_ALLOW_ALL', default=True, cast=bool)
-CORS_ALLOW_CREDENTIALS = config('CORS_ALLOW_CREDENTIALS', default=True, cast=bool)
+# CORS設定
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",        # 開発時
     "https://voice-picker-ai.com",  # 本番フロント
     "https://django.voice-picker-ai.com",
 ]
+
+if DEBUG:
+    CORS_ALLOWED_ORIGINS += [
+        "http://localhost:3000",    # 開発時
+        "http://127.0.0.1:3000",    # 開発時
+    ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24時間
+
+# CSRF設定
 CSRF_TRUSTED_ORIGINS = [
+    "https://voice-picker-ai.com",
     "https://django.voice-picker-ai.com",
 ]
+
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 # Application definition
 INSTALLED_APPS = [
@@ -310,3 +349,7 @@ STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 SECURE_CONTENT_TYPE_NOSNIFF = True  # X-Content-Type-Options: nosniff
 X_FRAME_OPTIONS = 'DENY'            # X-Frame-Options: DENY
 SECURE_BROWSER_XSS_FILTER = True    # X-XSS-Protection: 1; mode=block
+
+# ファイルアップロードの設定
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1073741824  # 1GB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 1073741824  # 1GB

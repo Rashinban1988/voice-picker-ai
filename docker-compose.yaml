@@ -12,8 +12,6 @@ services:
     command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --nothreading"
     volumes:
       - .:/code
-    environment:
-      - DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE}"
     networks:
       - webdev
     ports:
