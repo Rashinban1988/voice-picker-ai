@@ -449,16 +449,22 @@ def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     """
     processing_logger.info(f"Saving transcription: start_time={start}, text={transcription_text}, speaker={speaker}")
 
-    serializer_class = TranscriptionSerializer(data={
-        "start_time": start,
-        "text": transcription_text,
-        "uploaded_file": uploaded_file_id,
-        "speaker": speaker,
-    })
-    if serializer_class.is_valid():
-        serializer_class.save()
-    else:
-        processing_logger.error(f"transcription_textが空です: {transcription_text}")
+    try:
+        serializer = TranscriptionSerializer(data={
+            "start_time": int(start),
+            "text": transcription_text,
+            "uploaded_file": uploaded_file_id,
+            "speaker": speaker,
+        })
+
+        if serializer.is_valid():
+            serializer.save()
+            processing_logger.info(f"Transcription saved successfully: {serializer.data}")
+        else:
+            processing_logger.error(f"Validation error: {serializer.errors}")
+
+    except Exception as e:
+        processing_logger.error(f"Error saving transcription: {e}")
 
 # @shared_task # Celeryを使う場合コメントアウトを外す
 # def transcribe_and_save_async(file_path, uploaded_file_id):
