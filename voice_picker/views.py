@@ -32,6 +32,7 @@ from vosk import KaldiRecognizer, Model
 import torch
 import whisper
 from .models import Transcription, UploadedFile, Environment
+from .models.uploaded_file import Status
 from .serializers import TranscriptionSerializer, UploadedFileSerializer, EnvironmentSerializer
 from pyannote.audio import Pipeline
 from pyannote.audio import Audio
@@ -271,11 +272,16 @@ class TranscriptionSaveViewSet(viewsets.ViewSet):
 
             for transcription in transcriptions:
                 save_transcription(
-                    transcription_text=transcription.get('text'),
-                    start=transcription.get('start'),
-                    uploaded_file_id=uploaded_file_id,
-                    speaker=transcription.get('speaker')
+                    transcription_text = transcription.get('text'),
+                    start = transcription.get('start'),
+                    uploaded_file_id = uploaded_file_id,
+                    speaker = transcription.get('speaker')
                 )
+
+            # 処理ステータスの更新
+            UploadedFile.objects.filter(id=uploaded_file_id).update(
+                status = Status.PROCESSED
+            )
 
             return Response(
                 {"message": "Transcriptions saved successfully"},
