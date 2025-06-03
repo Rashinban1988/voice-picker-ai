@@ -278,6 +278,11 @@ class TranscriptionSaveViewSet(viewsets.ViewSet):
                     speaker = transcription.get('speaker')
                 )
 
+            uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
+            result = text_generation_save(uploaded_file)
+            if not isinstance(result, UploadedFile):
+                raise Exception("テキスト生成に失敗しました")
+
             # 処理ステータスの更新
             UploadedFile.objects.filter(id=uploaded_file_id).update(
                 status = Status.PROCESSED
