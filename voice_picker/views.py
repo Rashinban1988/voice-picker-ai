@@ -751,6 +751,258 @@ def create_meeting_minutes(text: str) -> str:
         processing_logger.error(f"議事録作成中にエラーが発生しました: {e}")
         return "議事録作成に失敗しました。"
 
+def summarize_text_with_instruction(text: str, instruction: str = "") -> str:
+    """
+    カスタム指示付きでテキストを要約する。
+
+    Args:
+        text (str): 要約するテキスト
+        instruction (str): カスタム指示
+    Returns:
+        str: マークダウン形式で要約されたテキスト
+    """
+    try:
+        base_prompt = "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"
+        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"
+        
+        if instruction.strip():
+            user_prompt += f"\\n\\n追加の指示: {instruction}"
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": base_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=500
+        )
+        return remove_markdown_blocks(response.choices[0].message.content)
+    except Exception as e:
+        processing_logger.error(f"テキスト要約中にエラーが発生しました: {e}")
+        return "要約に失敗しました。"
+
+def definition_issue_with_instruction(text: str, instruction: str = "") -> str:
+    """
+    カスタム指示付きでテキストを分析し、主要な課題点を特定する。
+
+    Args:
+        text (str): 分析するテキスト
+        instruction (str): カスタム指示
+    Returns:
+        str: マークダウン形式で主要な課題点
+    """
+    try:
+        base_prompt = "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
+        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
+        
+        if instruction.strip():
+            user_prompt += f"\\n\\n追加の指示: {instruction}"
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": base_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=500
+        )
+        return remove_markdown_blocks(response.choices[0].message.content)
+    except Exception as e:
+        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
+        return "分析に失敗しました。"
+
+def definition_solution_with_instruction(text: str, instruction: str = "") -> str:
+    """
+    カスタム指示付きでテキストを分析し、取り組み案を特定する。
+
+    Args:
+        text (str): 分析するテキスト
+        instruction (str): カスタム指示
+    Returns:
+        str: マークダウン形式で取り組み案
+    """
+    try:
+        base_prompt = "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
+        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
+        
+        if instruction.strip():
+            user_prompt += f"\\n\\n追加の指示: {instruction}"
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": base_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=500
+        )
+        return remove_markdown_blocks(response.choices[0].message.content)
+    except Exception as e:
+        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
+        return "分析に失敗しました。"
+
+class RegenerateAnalysisViewSet(viewsets.ViewSet):
+    """
+    AI分析結果の再生成を行うViewSet
+    """
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'], url_path='summary')
+    def regenerate_summary(self, request):
+        """要約の再生成"""
+        try:
+            uploaded_file_id = request.data.get('uploaded_file_id')
+            instruction = request.data.get('instruction', '')
+            
+            if not uploaded_file_id:
+                return Response(
+                    {"error": "uploaded_file_idが必要です"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            organization = user.organization
+            
+            try:
+                uploaded_file = UploadedFile.objects.get(
+                    id=uploaded_file_id, 
+                    organization=organization
+                )
+            except UploadedFile.DoesNotExist:
+                return Response(
+                    {"error": "ファイルが見つかりません"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            transcriptions = uploaded_file.transcription.all().order_by('start_time')
+            if not transcriptions.exists():
+                return Response(
+                    {"error": "文字起こしデータがありません"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            all_transcription_text = "".join(transcription.text for transcription in transcriptions)
+            
+            summary_text = summarize_text_with_instruction(all_transcription_text, instruction)
+            uploaded_file.summarization = summary_text
+            uploaded_file.save()
+            
+            return Response({
+                "message": "要約が再生成されました",
+                "summary": summary_text
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            processing_logger.error(f"要約再生成中にエラーが発生しました: {e}")
+            return Response(
+                {"error": "要約の再生成に失敗しました"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='issues')
+    def regenerate_issues(self, request):
+        """課題の再生成"""
+        try:
+            uploaded_file_id = request.data.get('uploaded_file_id')
+            instruction = request.data.get('instruction', '')
+            
+            if not uploaded_file_id:
+                return Response(
+                    {"error": "uploaded_file_idが必要です"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            organization = user.organization
+            
+            try:
+                uploaded_file = UploadedFile.objects.get(
+                    id=uploaded_file_id, 
+                    organization=organization
+                )
+            except UploadedFile.DoesNotExist:
+                return Response(
+                    {"error": "ファイルが見つかりません"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            transcriptions = uploaded_file.transcription.all().order_by('start_time')
+            if not transcriptions.exists():
+                return Response(
+                    {"error": "文字起こしデータがありません"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            all_transcription_text = "".join(transcription.text for transcription in transcriptions)
+            
+            issue_text = definition_issue_with_instruction(all_transcription_text, instruction)
+            uploaded_file.issue = issue_text
+            uploaded_file.save()
+            
+            return Response({
+                "message": "課題が再生成されました",
+                "issues": issue_text
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            processing_logger.error(f"課題再生成中にエラーが発生しました: {e}")
+            return Response(
+                {"error": "課題の再生成に失敗しました"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='solutions')
+    def regenerate_solutions(self, request):
+        """取り組み案の再生成"""
+        try:
+            uploaded_file_id = request.data.get('uploaded_file_id')
+            instruction = request.data.get('instruction', '')
+            
+            if not uploaded_file_id:
+                return Response(
+                    {"error": "uploaded_file_idが必要です"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            organization = user.organization
+            
+            try:
+                uploaded_file = UploadedFile.objects.get(
+                    id=uploaded_file_id, 
+                    organization=organization
+                )
+            except UploadedFile.DoesNotExist:
+                return Response(
+                    {"error": "ファイルが見つかりません"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            transcriptions = uploaded_file.transcription.all().order_by('start_time')
+            if not transcriptions.exists():
+                return Response(
+                    {"error": "文字起こしデータがありません"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            all_transcription_text = "".join(transcription.text for transcription in transcriptions)
+            
+            solution_text = definition_solution_with_instruction(all_transcription_text, instruction)
+            uploaded_file.solution = solution_text
+            uploaded_file.save()
+            
+            return Response({
+                "message": "取り組み案が再生成されました",
+                "solutions": solution_text
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            processing_logger.error(f"取り組み案再生成中にエラーが発生しました: {e}")
+            return Response(
+                {"error": "取り組み案の再生成に失敗しました"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 def get_video_duration(file_path: str) -> float:
     """
     動画・音声ファイルの再生時間を取得する。
