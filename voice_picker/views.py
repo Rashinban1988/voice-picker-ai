@@ -8,7 +8,7 @@ import warnings
 import re
 import webvtt
 import uuid
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 # import wave
 
 import numpy as np
@@ -40,6 +40,7 @@ import torchaudio
 from pyannote.audio.pipelines.utils.hook import ProgressHook
 from django.utils import timezone
 from rest_framework.renderers import StaticHTMLRenderer
+from pydub.silence import detect_nonsilent
 
 # 環境変数をロードする
 load_dotenv()
@@ -53,7 +54,7 @@ django_logger = logging.getLogger('django')
 api_logger = logging.getLogger('api')
 processing_logger = logging.getLogger('processing')
 
-@lru_cache(maxsize=1)
+# @lru_cache(maxsize=1)
 def get_whisper_model():
     # オープンソースWhisperモデルのロード
     # GPUを使用する場合
@@ -351,6 +352,8 @@ def process_audio(file_path, file_extension):
 
     # ノイズ除去
     samples = np.array(audio.get_array_of_samples())
+
+    # CPUのみで動作するように設定（GPUエラーを回避）
     reduced_noise = nr.reduce_noise(
         y=samples,
         sr=audio.frame_rate,
@@ -364,8 +367,8 @@ def process_audio(file_path, file_extension):
         clip_noise_stationary=True,
         use_tqdm=False,
         n_jobs=1,
-        use_torch=True,
-        device="cuda"
+        use_torch=False,  # torchを使用しない
+        device="cpu"      # CPUのみ使用
     )
 
     # 音声データの再構築
@@ -609,6 +612,387 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         processing_logger.error(f"エラーが発生しました: {e}")
         return False
 
+def transcribe_without_diarization(file_path, uploaded_file_id, is_free_user: bool = False):
+    """
+    話者分離なしで文字起こしを実行する関数
+    30秒を超えるまでは1レコードにまとめる
+
+    Args:
+        file_path (str): 音声ファイルのパス
+        uploaded_file_id (str): アップロードファイルのID
+        is_free_user (bool): 無料ユーザーかどうか
+
+    Returns:
+        bool: 処理成功時True、失敗時False
+    """
+    try:
+        # pyannoteはwavファイルの方が精度が高いので、wavファイルに変換する
+        is_wav_file = True
+        temp_file_path = file_path
+        file_extension = os.path.splitext(file_path)[1]
+        if file_extension != ".wav":
+            temp_file_path, file_extension = process_audio(file_path, file_extension)
+            is_wav_file = False
+
+        # Whisperで文字起こしを実行 有料ユーザーの場合はopenaiのapiを使用
+        if is_free_user:
+            whisper_model = get_whisper_model()
+            all_result = whisper_model.transcribe(temp_file_path, language="ja")
+        else:
+            all_result = transcribe_openai(temp_file_path)
+
+        # 30秒制限でセグメントをまとめる
+        segment_limit_time = 30  # 30秒の制限
+        temp_threshold_time = segment_limit_time
+        temp_segment_transcription_text = ""
+        temp_segment_start_time = 0
+        temp_segment_speaker = "UNKNOWN_SPEAKER"
+
+        # 文字起こし結果を時間順にソート
+        segments = sorted(all_result['segments'], key=lambda x: x['start'])
+
+        for result in segments:
+            result_start = int(result['start'])
+            result_end = int(result['end'])
+            result_text = result['text']
+
+            # 30秒を超える場合、現在のセグメントを保存して新しいセグメントを開始
+            if result_end > temp_threshold_time:
+                # 現在のセグメントを保存（空でない場合のみ）
+                if temp_segment_transcription_text.strip():
+                    save_transcription(
+                        temp_segment_transcription_text.strip(),
+                        temp_segment_start_time,
+                        uploaded_file_id,
+                        temp_segment_speaker
+                    )
+                    print(f"[{temp_segment_start_time}s - {temp_threshold_time}s] {temp_segment_speaker}: {temp_segment_transcription_text.strip()}")
+                    print("------------------------------------------------------------------------------------------------")
+
+                # 新しいセグメントを開始
+                temp_segment_transcription_text = result_text
+                temp_segment_start_time = result_start
+                temp_threshold_time = result_start + segment_limit_time
+            else:
+                # 30秒以内の場合は現在のセグメントに追加
+                if temp_segment_transcription_text:
+                    temp_segment_transcription_text += " " + result_text
+                else:
+                    temp_segment_transcription_text = result_text
+                    temp_segment_start_time = result_start
+
+        # 最後のセグメントが残っている場合は保存
+        if temp_segment_transcription_text.strip():
+            save_transcription(
+                temp_segment_transcription_text.strip(),
+                temp_segment_start_time,
+                uploaded_file_id,
+                temp_segment_speaker
+            )
+            print(f"[{temp_segment_start_time}s - {temp_threshold_time}s] {temp_segment_speaker}: {temp_segment_transcription_text.strip()}")
+            print("------------------------------------------------------------------------------------------------")
+
+        # ファイルを削除
+        if not is_wav_file:
+            os.remove(temp_file_path)
+
+        return True
+
+    except Exception as e:
+        processing_logger.error(f"文字起こしでエラーが発生しました: {e}")
+        return False
+
+def get_file_size_mb(file_path: str) -> float:
+    """
+    ファイルサイズをMB単位で取得する。
+
+    Args:
+        file_path (str): ファイルパス
+
+    Returns:
+        float: ファイルサイズ（MB）
+    """
+    return os.path.getsize(file_path) / (1024 * 1024)
+
+def find_silence_points(audio: AudioSegment, min_silence_len: int = 1000, silence_thresh: int = -40) -> list:
+    """
+    音声ファイル内の無音区間を検出して分割ポイントを取得する。
+
+    Args:
+        audio (AudioSegment): 音声データ
+        min_silence_len (int): 最小無音長（ミリ秒）
+        silence_thresh (int): 無音判定の閾値（dB）
+
+    Returns:
+        list: 分割ポイントのリスト（ミリ秒）
+    """
+    # 無音区間を検出
+    silence_ranges = detect_nonsilent(
+        audio,
+        min_silence_len=min_silence_len,
+        silence_thresh=silence_thresh
+    )
+
+    # 無音区間の開始点を分割ポイントとして使用
+    split_points = []
+    for start, end in silence_ranges:
+        # 無音区間の中央を分割ポイントとする
+        split_point = (start + end) // 2
+        split_points.append(split_point)
+
+    return split_points
+
+def split_audio_file(file_path: str, max_size_mb: float = 24.0) -> list:
+    """
+    音声ファイルを25MB制限に合わせて分割する。
+
+    Args:
+        file_path (str): 音声ファイルのパス
+        max_size_mb (float): 最大ファイルサイズ（MB）
+
+    Returns:
+        list: 分割されたファイルパスのリスト
+    """
+    try:
+        # ファイルサイズをチェック
+        file_size_mb = get_file_size_mb(file_path)
+        if file_size_mb <= max_size_mb:
+            # 25MB以下なら分割不要
+            return [file_path]
+
+        # 音声ファイルを読み込み
+        audio = AudioSegment.from_file(file_path)
+        total_duration_ms = len(audio)
+
+        # より効率的な分割ロジック
+        # ファイルサイズと時間の比率から適切な分割時間を計算
+        target_chunk_duration_ms = int((max_size_mb / file_size_mb) * total_duration_ms * 0.9)  # 安全マージン
+
+        # 最小分割時間を設定（30秒 = 30000ms）
+        min_chunk_duration_ms = 30000
+        if target_chunk_duration_ms < min_chunk_duration_ms:
+            target_chunk_duration_ms = min_chunk_duration_ms
+
+        # 無音区間を検出して分割ポイントを取得
+        silence_points = find_silence_points(audio)
+
+        split_files = []
+        temp_dir = os.path.dirname(file_path)
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+
+        start_time = 0
+        chunk_index = 0
+
+        while start_time < total_duration_ms:
+            # チャンクの終了時間を計算
+            end_time = min(start_time + target_chunk_duration_ms, total_duration_ms)
+
+            # 無音区間を優先して分割ポイントを調整
+            best_silence_point = None
+            for silence_point in silence_points:
+                if start_time < silence_point < end_time:
+                    # 終了時間に近い無音区間を選択
+                    if best_silence_point is None or abs(silence_point - end_time) < abs(best_silence_point - end_time):
+                        best_silence_point = silence_point
+
+            if best_silence_point:
+                end_time = best_silence_point
+
+            # 音声を分割
+            chunk = audio[start_time:end_time]
+
+            # 分割ファイルのパスを生成
+            chunk_path = os.path.join(temp_dir, f"{base_name}_chunk_{chunk_index:03d}.wav")
+
+            # 分割ファイルを保存
+            chunk.export(chunk_path, format="wav")
+
+            # ファイルサイズをチェック
+            chunk_size_mb = get_file_size_mb(chunk_path)
+            if chunk_size_mb > max_size_mb:
+                # ファイルサイズが大きすぎる場合は削除して再分割
+                os.remove(chunk_path)
+                # より小さく分割（現在のチャンクをさらに分割）
+                sub_chunks = split_audio_file(chunk_path, max_size_mb)
+                split_files.extend(sub_chunks)
+            else:
+                split_files.append(chunk_path)
+
+            start_time = end_time
+            chunk_index += 1
+
+            # 無限ループ防止
+            if chunk_index > 50:  # より現実的な上限
+                processing_logger.error("音声ファイルの分割が無限ループに陥りました")
+                break
+
+        processing_logger.info(f"音声ファイルを{len(split_files)}個に分割しました（予想: {int(file_size_mb / max_size_mb) + 1}個）")
+        return split_files
+
+    except Exception as e:
+        processing_logger.error(f"音声ファイルの分割中にエラーが発生しました: {e}")
+        return [file_path]
+
+def merge_transcription_results(results: list, time_offsets: list) -> dict:
+    """
+    分割された文字起こし結果を結合する。
+
+    Args:
+        results (list): 各分割ファイルの文字起こし結果のリスト
+        time_offsets (list): 各分割ファイルの時間オフセットのリスト
+
+    Returns:
+        dict: 結合された文字起こし結果
+    """
+    merged_segments = []
+
+    for i, (result, time_offset) in enumerate(zip(results, time_offsets)):
+        if not result or 'segments' not in result:
+            continue
+
+        for segment in result['segments']:
+            # 時間を調整
+            adjusted_segment = segment.copy()
+            adjusted_segment['start'] = segment['start'] + time_offset
+            adjusted_segment['end'] = segment['end'] + time_offset
+            merged_segments.append(adjusted_segment)
+
+    # 時間順にソート
+    merged_segments.sort(key=lambda x: x['start'])
+
+    # 結合されたテキストを作成
+    merged_text = ' '.join(segment['text'] for segment in merged_segments)
+
+    return {
+        'text': merged_text,
+        'segments': merged_segments
+    }
+
+def transcribe_openai(file_path: str) -> dict:
+    """
+    OpenAIのAPIを使用して音声ファイルを文字起こしする。
+    25MB制限を超える場合は自動的に分割して処理する。
+
+    Args:
+        file_path (str): 音声ファイルのパス
+
+    Returns:
+        dict: 文字起こし結果
+    """
+    try:
+        # ファイルサイズをチェック
+        file_size_mb = get_file_size_mb(file_path)
+
+        if file_size_mb <= 24.0:  # 安全マージンとして24MB以下
+            # 25MB以下なら通常通り処理
+            response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=open(file_path, "rb"),
+                language="ja",
+                response_format="verbose_json"
+            )
+
+            # TranscriptionVerboseオブジェクトを辞書形式に変換
+            return {
+                "text": response.text,
+                "segments": [
+                    {
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text
+                    }
+                    for segment in response.segments
+                ]
+            }
+        else:
+            # 25MBを超える場合は分割処理
+            processing_logger.info(f"ファイルサイズが{file_size_mb:.2f}MBのため、分割処理を実行します")
+
+            # 音声ファイルを分割
+            split_files = split_audio_file(file_path)
+            processing_logger.info(f"音声ファイルを{len(split_files)}個に分割しました")
+
+            if len(split_files) == 1:
+                # 分割できなかった場合は通常処理
+                response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=open(file_path, "rb"),
+                    language="ja",
+                    response_format="verbose_json"
+                )
+
+                return {
+                    "text": response.text,
+                    "segments": [
+                        {
+                            "start": segment.start,
+                            "end": segment.end,
+                            "text": segment.text
+                        }
+                        for segment in response.segments
+                    ]
+                }
+
+            # 各分割ファイルを処理
+            results = []
+            time_offsets = []
+            audio = AudioSegment.from_file(file_path)
+
+            for i, split_file in enumerate(split_files):
+                try:
+                    processing_logger.info(f"分割ファイル {i+1}/{len(split_files)} を処理中...")
+
+                    # 分割ファイルの文字起こし
+                    response = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=open(split_file, "rb"),
+                        language="ja",
+                        response_format="verbose_json"
+                    )
+
+                    # 時間オフセットを計算
+                    split_audio = AudioSegment.from_file(split_file)
+                    time_offset = len(audio[:len(audio) * i // len(split_files)]) / 1000.0
+
+                    # 結果を辞書形式に変換
+                    result_dict = {
+                        "text": response.text,
+                        "segments": [
+                            {
+                                "start": segment.start,
+                                "end": segment.end,
+                                "text": segment.text
+                            }
+                            for segment in response.segments
+                        ]
+                    }
+
+                    results.append(result_dict)
+                    time_offsets.append(time_offset)
+
+                    # 一時ファイルを削除
+                    os.remove(split_file)
+
+                except Exception as e:
+                    processing_logger.error(f"分割ファイル {split_file} の処理中にエラーが発生しました: {e}")
+                    # 一時ファイルを削除
+                    if os.path.exists(split_file):
+                        os.remove(split_file)
+                    continue
+
+            # 結果を結合
+            if results:
+                merged_result = merge_transcription_results(results, time_offsets)
+                processing_logger.info("分割された文字起こし結果を結合しました")
+                return merged_result
+            else:
+                processing_logger.error("すべての分割ファイルの処理に失敗しました")
+                return {"text": "", "segments": []}
+
+    except Exception as e:
+        processing_logger.error(f"OpenAIで文字起こしに失敗しました: {e}")
+        return {"text": "", "segments": []}
+
 @transaction.atomic
 def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, bool]:
     """
@@ -764,10 +1148,10 @@ def summarize_text_with_instruction(text: str, instruction: str = "") -> str:
     try:
         base_prompt = "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"
         user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"
-        
+
         if instruction.strip():
             user_prompt += f"\\n\\n追加の指示: {instruction}"
-        
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -794,10 +1178,10 @@ def definition_issue_with_instruction(text: str, instruction: str = "") -> str:
     try:
         base_prompt = "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
         user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
-        
+
         if instruction.strip():
             user_prompt += f"\\n\\n追加の指示: {instruction}"
-        
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -824,10 +1208,10 @@ def definition_solution_with_instruction(text: str, instruction: str = "") -> st
     try:
         base_prompt = "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
         user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
-        
+
         if instruction.strip():
             user_prompt += f"\\n\\n追加の指示: {instruction}"
-        
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -853,49 +1237,49 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
         try:
             uploaded_file_id = request.data.get('uploaded_file_id')
             instruction = request.data.get('instruction', '')
-            
+
             if not uploaded_file_id:
                 return Response(
-                    {"error": "uploaded_file_idが必要です"}, 
+                    {"error": "uploaded_file_idが必要です"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             user = request.user
             organization = user.organization
-            
+
             try:
                 uploaded_file = UploadedFile.objects.get(
-                    id=uploaded_file_id, 
+                    id=uploaded_file_id,
                     organization=organization
                 )
             except UploadedFile.DoesNotExist:
                 return Response(
-                    {"error": "ファイルが見つかりません"}, 
+                    {"error": "ファイルが見つかりません"},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
-                    {"error": "文字起こしデータがありません"}, 
+                    {"error": "文字起こしデータがありません"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
-            
+
             summary_text = summarize_text_with_instruction(all_transcription_text, instruction)
             uploaded_file.summarization = summary_text
             uploaded_file.save()
-            
+
             return Response({
                 "message": "要約が再生成されました",
                 "summary": summary_text
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             processing_logger.error(f"要約再生成中にエラーが発生しました: {e}")
             return Response(
-                {"error": "要約の再生成に失敗しました"}, 
+                {"error": "要約の再生成に失敗しました"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -905,49 +1289,49 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
         try:
             uploaded_file_id = request.data.get('uploaded_file_id')
             instruction = request.data.get('instruction', '')
-            
+
             if not uploaded_file_id:
                 return Response(
-                    {"error": "uploaded_file_idが必要です"}, 
+                    {"error": "uploaded_file_idが必要です"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             user = request.user
             organization = user.organization
-            
+
             try:
                 uploaded_file = UploadedFile.objects.get(
-                    id=uploaded_file_id, 
+                    id=uploaded_file_id,
                     organization=organization
                 )
             except UploadedFile.DoesNotExist:
                 return Response(
-                    {"error": "ファイルが見つかりません"}, 
+                    {"error": "ファイルが見つかりません"},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
-                    {"error": "文字起こしデータがありません"}, 
+                    {"error": "文字起こしデータがありません"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
-            
+
             issue_text = definition_issue_with_instruction(all_transcription_text, instruction)
             uploaded_file.issue = issue_text
             uploaded_file.save()
-            
+
             return Response({
                 "message": "課題が再生成されました",
                 "issues": issue_text
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             processing_logger.error(f"課題再生成中にエラーが発生しました: {e}")
             return Response(
-                {"error": "課題の再生成に失敗しました"}, 
+                {"error": "課題の再生成に失敗しました"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -957,49 +1341,49 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
         try:
             uploaded_file_id = request.data.get('uploaded_file_id')
             instruction = request.data.get('instruction', '')
-            
+
             if not uploaded_file_id:
                 return Response(
-                    {"error": "uploaded_file_idが必要です"}, 
+                    {"error": "uploaded_file_idが必要です"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             user = request.user
             organization = user.organization
-            
+
             try:
                 uploaded_file = UploadedFile.objects.get(
-                    id=uploaded_file_id, 
+                    id=uploaded_file_id,
                     organization=organization
                 )
             except UploadedFile.DoesNotExist:
                 return Response(
-                    {"error": "ファイルが見つかりません"}, 
+                    {"error": "ファイルが見つかりません"},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
-                    {"error": "文字起こしデータがありません"}, 
+                    {"error": "文字起こしデータがありません"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
-            
+
             solution_text = definition_solution_with_instruction(all_transcription_text, instruction)
             uploaded_file.solution = solution_text
             uploaded_file.save()
-            
+
             return Response({
                 "message": "取り組み案が再生成されました",
                 "solutions": solution_text
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             processing_logger.error(f"取り組み案再生成中にエラーが発生しました: {e}")
             return Response(
-                {"error": "取り組み案の再生成に失敗しました"}, 
+                {"error": "取り組み案の再生成に失敗しました"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

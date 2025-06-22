@@ -36,6 +36,14 @@ class Organization(models.Model):
         from voice_picker.models.uploaded_file import UploadedFile
         return UploadedFile.objects.filter(organization=self)
 
+    def is_free_user(self):
+        """組織が無料ユーザー（プラン未契約）かどうかを判定"""
+        subscription = self.get_subscription()
+        if not subscription:
+            return True  # サブスクリプションが存在しない場合は無料ユーザー
+
+        return not subscription.is_active()
+
     def get_subscription(self):
         """組織のサブスクリプション情報を取得"""
         from .subscription import Subscription
