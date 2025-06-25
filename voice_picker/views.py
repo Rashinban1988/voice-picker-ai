@@ -16,7 +16,7 @@ import noisereduce as nr
 from functools import lru_cache
 # from celery import shared_task
 from django.db import transaction
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, FileResponse
 from django.views import View
 from dotenv import load_dotenv
 from pydub import AudioSegment
@@ -149,7 +149,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def audio(self, request, *args, **kwargs):
         """
-        音声ファイルのデータを取得する。
+        音声・動画ファイルのデータを取得する。
         """
         api_logger.info(f"UploadedFile audio request: {request.GET}")
         user = request.user
@@ -160,6 +160,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
 
         queryset = UploadedFile.objects.filter(organization=organization)
+        # UUIDフィールドに対応するため、pkを直接使用
         queryset = queryset.filter(id=kwargs['pk'])
 
         if not queryset.exists():
@@ -170,18 +171,55 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         file_path = instance.file.path
 
         if not os.path.exists(file_path):
+            api_logger.error(f"ファイルが見つかりません: {file_path}")
             return Response({"detail": "ファイルが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
 
         file_extension = os.path.splitext(file_path)[1].lower()
-        if file_extension not in ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']:
-            return Response({"detail": "音声ファイルではありません"}, status=status.HTTP_400_BAD_REQUEST)
+        supported_extensions = ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']
 
-        content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
-        response = HttpResponse(open(file_path, 'rb').read(), content_type=content_type)
-        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+        if file_extension not in supported_extensions:
+            api_logger.error(f"サポートされていないファイル形式: {file_extension}")
+            return Response({"detail": "サポートされていないファイル形式です"}, status=status.HTTP_400_BAD_REQUEST)
 
-        api_logger.info(f"UploadedFile audio response: file sent")
-        return response
+        try:
+            # ファイルサイズを取得
+            file_size = os.path.getsize(file_path)
+
+            # MIMEタイプを明示的に設定（.m4aファイル用に修正）
+            mime_types = {
+                '.mp3': 'audio/mpeg',
+                '.wav': 'audio/wav',
+                '.ogg': 'audio/ogg',
+                '.m4a': 'audio/mp4',  # .m4aファイルの正しいMIMEタイプ
+                '.mp4': 'video/mp4',
+                '.avi': 'video/x-msvideo',
+                '.mov': 'video/quicktime',
+                '.wmv': 'video/x-ms-wmv'
+            }
+
+            content_type = mime_types.get(file_extension, 'application/octet-stream')
+
+            # ファイル名を取得
+            filename = os.path.basename(file_path)
+
+            # FileResponseを使用してストリーミングでファイルを返却
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type=content_type,
+                as_attachment=False  # ブラウザで再生可能にする
+            )
+
+            # ヘッダーを設定
+            response['Content-Length'] = file_size
+            response['Accept-Ranges'] = 'bytes'
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+
+            api_logger.info(f"UploadedFile audio response: file sent successfully - {filename} ({file_size} bytes)")
+            return response
+
+        except Exception as e:
+            api_logger.error(f"ファイル返却中にエラーが発生しました: {e}")
+            return Response({"detail": "ファイルの取得に失敗しました"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def create(self, request, *args, **kwargs):
         api_logger.info(f"UploadedFile create request: {request.POST}")
@@ -431,16 +469,14 @@ def save_diarization_output(dz):
 
 def extract_speakers(dz):
     """
-    ダイアライゼーション（話者分離）の結果から話者を抽出する。
+    ダイアライゼーションの結果から話者情報を抽出する。
     """
-    spacer_milli = 500
-    dz = open("diarization.txt").read().splitlines()
-    processing_logger.info(f"dz: {dz}")
+    spacer_milli = 1000
     speakers = set()
     dzList = []
     for line in dz:
         processing_logger.info(f"line: {line}")
-        start, end = tuple(re.findall('[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=line))
+        start, end = tuple(re.findall(r'[0-9]+:[0-9]+:[0-9]+\.[0-9]+', string=line))
         processing_logger.info(f"start: {start}")
         processing_logger.info(f"end: {end}")
         start = millisec(start) - spacer_milli
