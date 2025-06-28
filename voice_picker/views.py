@@ -182,39 +182,63 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return Response({"detail": "サポートされていないファイル形式です"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # ファイルサイズを取得
             file_size = os.path.getsize(file_path)
-
-            # MIMEタイプを明示的に設定（.m4aファイル用に修正）
+            
             mime_types = {
                 '.mp3': 'audio/mpeg',
                 '.wav': 'audio/wav',
                 '.ogg': 'audio/ogg',
-                '.m4a': 'audio/mp4',  # .m4aファイルの正しいMIMEタイプ
+                '.m4a': 'audio/mp4',
                 '.mp4': 'video/mp4',
                 '.avi': 'video/x-msvideo',
                 '.mov': 'video/quicktime',
                 '.wmv': 'video/x-ms-wmv'
             }
-
             content_type = mime_types.get(file_extension, 'application/octet-stream')
-
-            # ファイル名を取得
             filename = os.path.basename(file_path)
 
-            # FileResponseを使用してストリーミングでファイルを返却
+            range_header = request.META.get('HTTP_RANGE')
+            if range_header:
+                range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+                if range_match:
+                    start = int(range_match.group(1))
+                    end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+                    
+                    if start >= file_size:
+                        return HttpResponse(status=416)
+                    
+                    end = min(end, file_size - 1)
+                    content_length = end - start + 1
+                    
+                    with open(file_path, 'rb') as f:
+                        f.seek(start)
+                        data = f.read(content_length)
+                    
+                    response = HttpResponse(
+                        data,
+                        status=206,
+                        content_type=content_type
+                    )
+                    response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                    response['Content-Length'] = str(content_length)
+                    response['Accept-Ranges'] = 'bytes'
+                    response['Content-Disposition'] = f'inline; filename="{filename}"'
+                    
+                    api_logger.info(f"Range request: {start}-{end}/{file_size} for {filename}")
+                    return response
+
             response = FileResponse(
                 open(file_path, 'rb'),
                 content_type=content_type,
-                as_attachment=False  # ブラウザで再生可能にする
+                as_attachment=False
             )
-
-            # ヘッダーを設定
             response['Content-Length'] = file_size
             response['Accept-Ranges'] = 'bytes'
             response['Content-Disposition'] = f'inline; filename="{filename}"'
+            response['Cache-Control'] = 'public, max-age=31536000, immutable'
+            response['ETag'] = f'"{instance.id}"'
 
-            api_logger.info(f"UploadedFile audio response: file sent successfully - {filename} ({file_size} bytes)")
+            api_logger.info(f"Full file response: {filename} ({file_size} bytes)")
             return response
 
         except Exception as e:
@@ -237,15 +261,22 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         file_serializer = UploadedFileSerializer(data=request.data)
         if file_serializer.is_valid():
             try:
-                uploaded_file = file_serializer.save(organization_id=organization_id) # UploadedFileモデルにファイル情報を保存
+                uploaded_file = file_serializer.save(organization_id=organization_id)
+                
+                file_path = uploaded_file.file.path
+                if os.path.exists(file_path):
+                    file_extension = os.path.splitext(file_path)[1].lower()
+                    supported_extensions = ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']
+                    
+                    if file_extension in supported_extensions:
+                        processing_logger.info(f"Improving audio index for: {file_path}")
+                        improve_audio_index(file_path)
 
-                # 動画ファイルの再生時間を取得して保存
                 if uploaded_file.file.name.endswith(('.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv')):
                     duration = get_video_duration(uploaded_file.file.path)
                     if duration is not None:
                         uploaded_file.duration = duration
                         uploaded_file.save()
-                        # シリアライザーを再取得
                         file_serializer = UploadedFileSerializer(uploaded_file)
 
             except Exception as e:
@@ -1450,3 +1481,75 @@ def get_video_duration(file_path: str) -> float:
     except Exception as e:
         processing_logger.error(f"ファイルの再生時間取得中にエラーが発生しました: {e}")
         return None
+
+
+def improve_audio_index(file_path: str) -> bool:
+    """
+    音声・動画ファイルのインデックス情報を改善してシーク精度を向上させる。
+    元のファイル形式は変更せず、メタデータのみを最適化する。
+    
+    Args:
+        file_path (str): 音声・動画ファイルのパス
+    
+    Returns:
+        bool: 成功した場合True、失敗した場合False
+    """
+    try:
+        import subprocess
+        
+        file_extension = os.path.splitext(file_path)[1].lower()
+        temp_path = file_path + '.tmp'
+        
+        if file_extension in ['.mp3']:
+            cmd = [
+                'ffmpeg', '-i', file_path,
+                '-c', 'copy',
+                '-write_xing', '1',
+                '-y', temp_path
+            ]
+        elif file_extension in ['.m4a', '.mp4']:
+            cmd = [
+                'ffmpeg', '-i', file_path,
+                '-c', 'copy',
+                '-movflags', 'faststart',
+                '-y', temp_path
+            ]
+        elif file_extension in ['.wav', '.ogg']:
+            cmd = [
+                'ffmpeg', '-i', file_path,
+                '-c', 'copy',
+                '-y', temp_path
+            ]
+        elif file_extension in ['.avi', '.mov', '.wmv']:
+            cmd = [
+                'ffmpeg', '-i', file_path,
+                '-c', 'copy',
+                '-movflags', 'faststart',
+                '-y', temp_path
+            ]
+        else:
+            processing_logger.warning(f"Unsupported format for index improvement: {file_extension}")
+            return False
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            os.replace(temp_path, file_path)
+            processing_logger.info(f"Audio index improved for: {file_path}")
+            return True
+        else:
+            processing_logger.error(f"ffmpeg failed for {file_path}: {result.stderr}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return False
+            
+    except Exception as e:
+        processing_logger.error(f"Error improving audio index for {file_path}: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return False
