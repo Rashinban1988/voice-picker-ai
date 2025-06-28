@@ -2,12 +2,14 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 from voice_picker.models.meeting import Meeting, MeetingStatus
+from voice_picker.models.uploaded_file import UploadedFile
 import logging
 import threading
 import time
 from datetime import datetime, timedelta
 import subprocess
 import os
+import shutil
 
 processing_logger = logging.getLogger('processing')
 
@@ -50,10 +52,13 @@ class Command(BaseCommand):
             recorded_file = self.start_browser_recording(meeting)
             
             if recorded_file:
+                uploaded_file = self.create_uploaded_file_from_recording(meeting, recorded_file)
+                
                 meeting.recorded_file_path = recorded_file
+                meeting.uploaded_file = uploaded_file
                 meeting.status = MeetingStatus.COMPLETED
                 meeting.save()
-                processing_logger.info(f'ミーティング録画完了: {meeting_id}')
+                processing_logger.info(f'ミーティング録画完了: {meeting_id}, UploadedFile ID: {uploaded_file.id}')
             else:
                 meeting.status = MeetingStatus.ERROR
                 meeting.save()
@@ -104,3 +109,39 @@ class Command(BaseCommand):
 
     def handle_meet_meeting(self, driver, meeting):
         pass
+
+    def create_uploaded_file_from_recording(self, meeting, recorded_file_path):
+        """録画ファイルからUploadedFileレコードを作成（会議情報を保持）"""
+        try:
+            from django.core.files import File
+            
+            meeting_date = meeting.scheduled_time.strftime('%Y年%m月%d日_%H時%M分')
+            platform_name = dict(meeting._meta.get_field('meeting_platform').choices)[meeting.meeting_platform]
+            filename = f"{platform_name}会議_{meeting_date}.mp4"
+            
+            uploaded_file = UploadedFile(organization=meeting.organization)
+            
+            if os.path.exists(recorded_file_path):
+                with open(recorded_file_path, 'rb') as f:
+                    django_file = File(f, name=filename)
+                    uploaded_file.file.save(filename, django_file, save=False)
+                
+                uploaded_file.save()
+                
+                try:
+                    os.remove(recorded_file_path)
+                    processing_logger.info(f'元の録画ファイルを削除: {recorded_file_path}')
+                except OSError:
+                    processing_logger.warning(f'元の録画ファイルの削除に失敗: {recorded_file_path}')
+            else:
+                processing_logger.error(f'録画ファイルが見つかりません: {recorded_file_path}')
+                raise FileNotFoundError(f'録画ファイルが見つかりません: {recorded_file_path}')
+            
+            processing_logger.info(f'UploadedFileレコード作成完了: {uploaded_file.id}')
+            processing_logger.info(f'ファイルパス: {uploaded_file.file.path}')
+            processing_logger.info(f'会議情報: {platform_name} - {meeting_date}')
+            return uploaded_file
+            
+        except Exception as e:
+            processing_logger.error(f'UploadedFileレコード作成エラー: {e}')
+            raise

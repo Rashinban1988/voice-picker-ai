@@ -26,6 +26,7 @@ class Meeting(models.Model):
         verbose_name='ステータス'
     )
     recorded_file_path = models.CharField(max_length=500, null=True, blank=True, verbose_name='録画ファイルパス')
+    uploaded_file = models.ForeignKey('UploadedFile', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='アップロードファイル')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
