@@ -8,7 +8,7 @@ import warnings
 import re
 import webvtt
 import uuid
-from moviepy import VideoFileClip
+from moviepy.editor import VideoFileClip
 # import wave
 
 import numpy as np
