@@ -174,3 +174,4 @@ vosk==0.3.44
 websockets==14.1
 webvtt-py==0.5.1
 yarl==1.18.3
+selenium==4.15.0

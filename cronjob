@@ -1,2 +1,4 @@
 # 毎時実行
 * * * * * python /code/manage.py transcribe >> /var/log/cron.log 2>&1
+# 毎分実行（ミーティング録画チェック）
+* * * * * python /code/manage.py record_meetings >> /var/log/cron.log 2>&1

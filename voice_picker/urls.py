@@ -1,6 +1,6 @@
 from django.urls import path, include
 from django.views.decorators.csrf import csrf_exempt
-from .views import UploadedFileViewSet, TranscriptionViewSet, TranscribeView, RegenerateAnalysisViewSet
+from .views import UploadedFileViewSet, TranscriptionViewSet, TranscribeView, RegenerateAnalysisViewSet, MeetingViewSet
 
 urlpatterns = [
     # UploadedFileの一覧を取得と新規作成を行うためのパス
@@ -39,4 +39,15 @@ urlpatterns = [
     path('api/regenerate/solutions/', csrf_exempt(RegenerateAnalysisViewSet.as_view({
         'post': 'regenerate_solutions'
     })), name='regenerate-solutions'),
+
+    path('api/meetings/', csrf_exempt(MeetingViewSet.as_view({
+        'get': 'list',
+        'post': 'create'
+    })), name='meetings-list'),
+
+    path('api/meetings/<uuid:pk>/', csrf_exempt(MeetingViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'delete': 'destroy'
+    })), name='meeting-detail'),
 ]
