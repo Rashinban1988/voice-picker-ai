@@ -33,7 +33,9 @@ import torch
 import whisper
 from .models import Transcription, UploadedFile, Environment
 from .models.uploaded_file import Status
+from .models.meeting import Meeting
 from .serializers import TranscriptionSerializer, UploadedFileSerializer, EnvironmentSerializer
+from .serializers.meeting import MeetingSerializer
 from pyannote.audio import Pipeline
 from pyannote.audio import Audio
 import torchaudio
@@ -86,11 +88,23 @@ class EnvironmentViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data)
         except Environment.DoesNotExist:
-            # 存在しない場合は新規作成
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save(code=kwargs['code'])
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class MeetingViewSet(viewsets.ModelViewSet):
+    queryset = Meeting.objects.all()
+    serializer_class = MeetingSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Meeting.objects.filter(organization=user.organization, exist=True)
+
+    def perform_create(self, serializer):
+        serializer.save(organization=self.request.user.organization)
 
 class UploadedFileViewSet(viewsets.ModelViewSet):
     queryset = UploadedFile.objects.all()
