@@ -7,6 +7,27 @@ import uuid
 from member_management.models import Organization
 from django.utils.translation import gettext_lazy as _
 
+def organization_upload_to(instance, filename):
+    """
+    組織IDベースのディレクトリ構造でファイルを保存
+    重複ファイル名を避けるため、必要に応じてファイル名を変更
+    """
+    organization_id = str(instance.organization.id)
+    
+    name, ext = os.path.splitext(filename)
+    
+    base_path = os.path.join(organization_id, filename)
+    counter = 1
+    
+    while UploadedFile.objects.filter(
+        organization=instance.organization,
+        file__endswith=f"/{filename}" if counter == 1 else f"/{name}_{counter}{ext}"
+    ).exists():
+        filename = f"{name}_{counter}{ext}"
+        counter += 1
+    
+    return os.path.join(organization_id, filename)
+
 class Status(models.IntegerChoices):
     UNPROCESSED = 0, _('未処理')
     IN_PROGRESS = 1, _('処理中')
@@ -16,7 +37,7 @@ class Status(models.IntegerChoices):
 class UploadedFile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='uploaded_files', verbose_name='組織')
-    file = models.FileField(upload_to='', verbose_name='ファイル')
+    file = models.FileField(upload_to=organization_upload_to, verbose_name='ファイル')
     status = models.IntegerField(
         choices=Status.choices,
         default=Status.UNPROCESSED,
@@ -63,12 +84,29 @@ def delete_old_file(sender, instance, **kwargs):
         else:
             new_file = instance.file
             if not old_file == new_file:
-                if os.path.isfile(old_file.path):
-                    os.remove(old_file.path)
+                if old_file and os.path.isfile(old_file.path):
+                    other_files_using_same_path = UploadedFile.objects.filter(
+                        file=old_file.name
+                    ).exclude(pk=instance.pk).exists()
+                    
+                    if not other_files_using_same_path:
+                        os.remove(old_file.path)
 
 # ファイルの削除
 @receiver(post_delete, sender=UploadedFile)
 def delete_file_on_delete(sender, instance, **kwargs):
     if instance.file:
         if os.path.isfile(instance.file.path):
-            os.remove(instance.file.path)
+            other_files_using_same_path = UploadedFile.objects.filter(
+                file=instance.file.name
+            ).exists()
+            
+            if not other_files_using_same_path:
+                os.remove(instance.file.path)
+                
+                try:
+                    dir_path = os.path.dirname(instance.file.path)
+                    if os.path.exists(dir_path) and not os.listdir(dir_path):
+                        os.rmdir(dir_path)
+                except OSError:
+                    pass
