@@ -18,8 +18,8 @@ class Meeting(models.Model):
         choices=[('zoom', 'Zoom'), ('teams', 'Teams'), ('meet', 'Google Meet')],
         verbose_name='プラットフォーム'
     )
-    scheduled_time = models.DateTimeField(verbose_name='開始予定時刻')
-    duration_minutes = models.IntegerField(default=60, verbose_name='録画時間（分）')
+    scheduled_time = models.DateTimeField(null=True, blank=True, verbose_name='開始予定時刻')
+    duration_minutes = models.IntegerField(default=120, verbose_name='録画時間（分）')
     status = models.IntegerField(
         choices=MeetingStatus.choices,
         default=MeetingStatus.SCHEDULED,

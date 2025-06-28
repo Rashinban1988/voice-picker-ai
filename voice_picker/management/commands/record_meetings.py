@@ -72,6 +72,7 @@ class Command(BaseCommand):
         try:
             from selenium import webdriver
             from selenium.webdriver.chrome.options import Options
+            from selenium.common.exceptions import WebDriverException
             
             chrome_options = Options()
             chrome_options.add_argument('--headless')
@@ -83,6 +84,7 @@ class Command(BaseCommand):
             driver = webdriver.Chrome(options=chrome_options)
             
             driver.get(meeting.meeting_url)
+            time.sleep(10)
             
             if meeting.meeting_platform == 'zoom':
                 self.handle_zoom_meeting(driver, meeting)
@@ -91,15 +93,56 @@ class Command(BaseCommand):
             elif meeting.meeting_platform == 'meet':
                 self.handle_meet_meeting(driver, meeting)
             
-            time.sleep(meeting.duration_minutes * 60)
+            recording_file = f"/tmp/meeting_{meeting.id}.mp4"
+            
+            self.monitor_meeting_until_end(driver, meeting, recording_file)
             
             driver.quit()
-            
-            return f"/recordings/{meeting.id}.mp4"
+            return recording_file
             
         except Exception as e:
             processing_logger.error(f'ブラウザ録画エラー: {e}')
             return None
+
+    def monitor_meeting_until_end(self, driver, meeting, recording_file):
+        """ミーティングが終了するまで監視"""
+        meeting_active = True
+        max_duration = meeting.duration_minutes * 60
+        start_time = time.time()
+        
+        while meeting_active:
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            
+            if elapsed_time > max_duration:
+                processing_logger.info(f'最大録画時間に達しました: {meeting.id}')
+                break
+            
+            if self.is_meeting_ended(driver, meeting.meeting_platform):
+                processing_logger.info(f'ミーティングが終了しました: {meeting.id}')
+                break
+            
+            try:
+                driver.current_url
+            except:
+                processing_logger.info(f'ブラウザプロセスが終了しました: {meeting.id}')
+                break
+            
+            time.sleep(30)
+
+    def is_meeting_ended(self, driver, platform):
+        """ミーティング終了を検出"""
+        try:
+            page_source = driver.page_source.lower()
+            if platform == 'zoom':
+                return "meeting has ended" in page_source or "the meeting has been ended" in page_source
+            elif platform == 'teams':
+                return "meeting has ended" in page_source or "call ended" in page_source
+            elif platform == 'meet':
+                return "meeting ended" in page_source or "you left the meeting" in page_source
+            return False
+        except Exception:
+            return False
 
     def handle_zoom_meeting(self, driver, meeting):
         pass
