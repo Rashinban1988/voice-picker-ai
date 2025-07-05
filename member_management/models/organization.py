@@ -55,7 +55,7 @@ class Organization(models.Model):
     def get_max_duration(self):
         """組織の最大利用可能時間（分）を取得"""
         subscription = self.get_subscription()
-        if subscription and subscription.is_active() and subscription.plan:
+        if subscription and subscription.is_active() and subscription.plan and subscription.is_within_contract_period():
             return subscription.plan.max_duration
         return 100  # デフォルト値
 
