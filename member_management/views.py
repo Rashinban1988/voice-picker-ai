@@ -344,11 +344,15 @@ def fulfill_subscription(session):
             }
         )
 
-        if not created:
+        if created:
+            api_logger.info(f"New subscription created for organization {organization.id} with plan {plan.id}")
+        else:
+            api_logger.info(f"Existing subscription found for organization {organization.id}. Current plan: {subscription.plan.id if subscription.plan else 'None'}")
             subscription.plan = plan
             subscription.status = Subscription.Status.ACTIVE
             subscription.stripe_subscription_id = session.get('subscription')
             subscription.save()
+            api_logger.info(f"Existing subscription updated to plan {subscription.plan.id}")
 
         stripe_subscription = stripe.Subscription.retrieve(session.get('subscription'))
 
@@ -384,6 +388,18 @@ def update_subscription(stripe_subscription):
 
         # サブスクリプションIDを必ず更新
         subscription.stripe_subscription_id = stripe_subscription['id']
+
+        # プラン情報の更新
+        if stripe_subscription.get('plan') and stripe_subscription['plan'].get('id'):
+            try:
+                stripe_price_id = stripe_subscription['plan']['id']
+                plan = SubscriptionPlan.objects.get(stripe_price_id=stripe_price_id)
+                subscription.plan = plan
+                api_logger.info(f"Subscription plan updated to {plan.id} for subscription {subscription.id}")
+            except SubscriptionPlan.DoesNotExist:
+                api_logger.error(f"SubscriptionPlan with stripe_price_id {stripe_price_id} not found.")
+        else:
+            api_logger.warning(f"No plan information found in stripe_subscription object for subscription {subscription.id}")
 
         # ステータス更新
         if stripe_subscription['status'] == 'active':
