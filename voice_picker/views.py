@@ -129,14 +129,23 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user
         organization = user.organization
 
-        # 今月作成分だけをフィルタリング
-        now = timezone.now()
-        uploaded_files = UploadedFile.objects.filter(
-            organization=organization,
-            exist=True,
-            created_at__year=now.year,
-            created_at__month=now.month
-        )
+        subscription = organization.get_subscription()
+        if subscription and subscription.is_active() and subscription.is_within_contract_period():
+            uploaded_files = UploadedFile.objects.filter(
+                organization=organization,
+                exist=True,
+                created_at__gte=subscription.current_period_start,
+                created_at__lte=subscription.current_period_end
+            )
+        else:
+            # サブスクリプションがない、または無効な場合は、現在の月でフィルタリング
+            now = timezone.now()
+            uploaded_files = UploadedFile.objects.filter(
+                organization=organization,
+                exist=True,
+                created_at__year=now.year,
+                created_at__month=now.month
+            )
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
 
         max_duration = organization.get_max_duration()
