@@ -4,6 +4,8 @@
 
 このドキュメントでは、Stripeサブスクリプション機能のテスト方法について説明します。
 
+**現在の状況**: 10件のテストがすべて成功し、Stripe APIをモック化することで安定したテスト環境が構築されています。
+
 ## テストの種類
 
 ### 1. ユニットテスト
@@ -28,6 +30,12 @@ python manage.py test member_management.tests.test_stripe.StripeCheckoutSessionT
 - **StripeWebhookTest**: Webhook処理のテスト
 - **StripeModelTest**: モデルの動作テスト
 - **StripeErrorHandlingTest**: エラーハンドリングのテスト
+
+#### テストの特徴
+
+- **モック化**: Stripe API呼び出しをモック化し、外部依存を排除
+- **高速実行**: 外部APIに依存しないため、テストが高速に実行される
+- **安定性**: ネットワーク問題やAPI制限の影響を受けない
 
 ### 2. 統合テスト
 
@@ -129,6 +137,32 @@ user = User.objects.create_user(
 )
 ```
 
+## ログ設定
+
+### Webhook処理の詳細ログ
+
+```python
+# settings.pyでログレベルを設定
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'backend/logs/django.log',
+        },
+    },
+    'loggers': {
+        'member_management.views': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
+```
+
 ## テストカバレッジ
 
 ### カバレッジの確認
@@ -149,7 +183,7 @@ coverage html
 
 ## トラブルシューティング
 
-### よくある問題
+### よくある問題と解決方法
 
 1. **Stripe APIキーが設定されていない**
    ```bash
@@ -170,6 +204,42 @@ coverage html
    # 上記のテストデータ作成コードを実行
    ```
 
+4. **MySQLのテストデータベース作成権限エラー**
+   ```bash
+   # MySQLでテスト用データベースを作成
+   mysql -u root -p
+   CREATE DATABASE test_vp_db;
+   GRANT ALL PRIVILEGES ON test_vp_db.* TO 'your_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+
+5. **カスタムユーザーマネージャーのcreate_userメソッドエラー**
+   ```python
+   # member_management/models.pyでcreate_userメソッドを実装
+   def create_user(self, username, email, password=None, **extra_fields):
+       if not username:
+           raise ValueError('ユーザー名は必須です')
+       email = self.normalize_email(email)
+       user = self.model(username=username, email=email, **extra_fields)
+       user.set_password(password)
+       user.save(using=self._db)
+       return user
+   ```
+
+6. **URL名の不一致エラー（NoReverseMatch）**
+   ```python
+   # urls.pyでURL名を正しく設定
+   path('create_checkout_session/', views.create_checkout_session, name='create_checkout_session'),
+   path('manage_portal/', views.manage_portal, name='manage_portal'),
+   ```
+
+7. **UUID形式エラー**
+   ```python
+   # テストでUUIDを正しい形式で生成
+   import uuid
+   plan_id = str(uuid.uuid4())
+   ```
+
 ### ログの確認
 
 ```bash
@@ -178,6 +248,9 @@ tail -f backend/logs/django.log
 
 # APIのログを確認
 tail -f backend/logs/api.log
+
+# Webhook処理の詳細ログを確認
+grep "Webhook" backend/logs/django.log
 ```
 
 ## 本番環境でのテスト
@@ -254,4 +327,57 @@ jobs:
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-``` 
+```
+
+## テスト実行スクリプト
+
+### 自動テスト実行
+
+```bash
+#!/bin/bash
+# run_stripe_tests.sh
+
+echo "Stripeサブスクリプション機能のテストを開始します..."
+
+# 環境変数の確認
+if [ -z "$STRIPE_SECRET_KEY" ]; then
+    echo "警告: STRIPE_SECRET_KEYが設定されていません"
+fi
+
+if [ -z "$STRIPE_WEBHOOK_SECRET" ]; then
+    echo "警告: STRIPE_WEBHOOK_SECRETが設定されていません"
+fi
+
+# テストの実行
+echo "ユニットテストを実行中..."
+python manage.py test member_management.tests.test_stripe --verbosity=2
+
+# テスト結果の確認
+if [ $? -eq 0 ]; then
+    echo "✅ すべてのテストが成功しました！"
+else
+    echo "❌ テストが失敗しました"
+    exit 1
+fi
+
+echo "テスト完了"
+```
+
+## 現在の実装状況
+
+### 完了済み機能
+
+- ✅ Stripeチェックアウトセッション作成
+- ✅ 顧客ポータル機能
+- ✅ Webhook処理（checkout.session.completed, customer.subscription.updated, customer.subscription.deleted）
+- ✅ サブスクリプション状態管理
+- ✅ エラーハンドリング
+- ✅ セキュリティミドルウェア
+- ✅ 包括的なユニットテスト（10件すべて成功）
+- ✅ モック化による安定したテスト環境
+
+### 今後の改善点
+
+- 🔄 UUID形式エラーのハンドリング改善
+- 🔄 より詳細なWebhook処理ログ
+- 🔄 パフォーマンス最適化 
