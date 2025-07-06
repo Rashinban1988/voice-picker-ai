@@ -91,3 +91,10 @@ class Subscription(models.Model):
 
     def is_active(self):
         return self.status == self.Status.ACTIVE or self.status == self.Status.TRIAL
+
+    def is_within_contract_period(self):
+        """現在の時刻が契約期間内にあるかどうかを判定"""
+        now = timezone.now()
+        if self.current_period_start and self.current_period_end:
+            return self.current_period_start <= now <= self.current_period_end
+        return False
