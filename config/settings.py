@@ -153,6 +153,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_browser_reload.middleware.BrowserReloadMiddleware', # 開発用ブラウザ自動更新
+    'member_management.middleware.StripeSecurityMiddleware', # Stripeセキュリティ
+    'member_management.middleware.SubscriptionAccessMiddleware', # サブスクリプションアクセス制御
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -304,7 +306,7 @@ LOGGING = {
             'backupCount': 30,  # 30日分のバックアップを保持
         },
         'api_file': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'config.logging_handlers.DailyRotatingFileHandler',
             'filename': os.path.join(LOGS_DIR, 'api'),
             'formatter': 'verbose',
@@ -333,7 +335,7 @@ LOGGING = {
         },
         'api': {
             'handlers': ['api_file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': True,
         },
     },
