@@ -31,6 +31,7 @@ import random
 import string
 # Third-party
 import stripe
+from stripe.error import StripeError, CardError, InvalidRequestError, AuthenticationError
 
 api_logger = logging.getLogger('django')
 
@@ -216,7 +217,20 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             stripe.api_key = settings.STRIPE_SECRET_KEY
             plan_id = request.data.get('plan_id')
 
-            plan = SubscriptionPlan.objects.get(id=plan_id)
+            if not plan_id:
+                return Response(
+                    {'error': 'プランIDが必要です'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+            except SubscriptionPlan.DoesNotExist:
+                return Response(
+                    {'error': '指定されたプランが見つかりません'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
             organization = request.user.organization
 
             subscription, created = Subscription.objects.get_or_create(
@@ -225,40 +239,71 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             )
 
             if not subscription.stripe_customer_id:
-                customer = stripe.Customer.create(
-                    email=request.user.email,
-                    name=f"{organization.name} ({request.user.last_name} {request.user.first_name})",
-                    metadata={
-                        'organization_id': str(organization.id),
-                        'user_id': str(request.user.id)
-                    }
-                )
-                subscription.stripe_customer_id = customer.id
-                subscription.save()
+                try:
+                    customer = stripe.Customer.create(
+                        email=request.user.email,
+                        name=f"{organization.name} ({request.user.last_name} {request.user.first_name})",
+                        metadata={
+                            'organization_id': str(organization.id),
+                            'user_id': str(request.user.id)
+                        }
+                    )
+                    subscription.stripe_customer_id = customer.id
+                    subscription.save()
+                    api_logger.info(f"Created Stripe customer {customer.id} for organization {organization.id}")
+                except StripeError as e:
+                    api_logger.error(f"Failed to create Stripe customer: {e}")
+                    return Response(
+                        {'error': '顧客情報の作成に失敗しました'}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
 
             success_url = f"{settings.NEXT_JS_HOST}/mypage?session_id={{CHECKOUT_SESSION_ID}}"
             cancel_url = f"{settings.NEXT_JS_HOST}/mypage"
 
-            checkout_session = stripe.checkout.Session.create(
-                customer=subscription.stripe_customer_id,
-                payment_method_types=['card'],
-                line_items=[{
-                    'price': plan.stripe_price_id,
-                    'quantity': 1,
-                }],
-                mode='subscription',
-                success_url=success_url,
-                cancel_url=cancel_url,
-                metadata={
-                    'organization_id': str(organization.id),
-                    'plan_id': str(plan.id)
-                }
-            )
+            try:
+                checkout_session = stripe.checkout.Session.create(
+                    customer=subscription.stripe_customer_id,
+                    payment_method_types=['card'],
+                    line_items=[{
+                        'price': plan.stripe_price_id,
+                        'quantity': 1,
+                    }],
+                    mode='subscription',
+                    success_url=success_url,
+                    cancel_url=cancel_url,
+                    metadata={
+                        'organization_id': str(organization.id),
+                        'plan_id': str(plan.id)
+                    }
+                )
+                api_logger.info(f"Created checkout session {checkout_session.id} for organization {organization.id}")
+                return Response({'checkout_url': checkout_session.url})
 
-            return Response({'checkout_url': checkout_session.url})
+            except StripeError as e:
+                api_logger.error(f"Failed to create checkout session: {e}")
+                if isinstance(e, CardError):
+                    return Response(
+                        {'error': 'カード情報に問題があります'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                elif isinstance(e, InvalidRequestError):
+                    return Response(
+                        {'error': '無効なリクエストです'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    return Response(
+                        {'error': 'チェックアウトセッションの作成に失敗しました'}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
 
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            api_logger.error(f"Unexpected error in create_checkout_session: {e}")
+            return Response(
+                {'error': 'システムエラーが発生しました'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['post'])
     def manage_portal(self, request):
@@ -283,15 +328,27 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
             return_url = f"{settings.NEXT_JS_HOST}/mypage"
 
-            portal_session = stripe.billing_portal.Session.create(
-                customer=subscription.stripe_customer_id,
-                return_url=return_url,
-            )
+            try:
+                portal_session = stripe.billing_portal.Session.create(
+                    customer=subscription.stripe_customer_id,
+                    return_url=return_url,
+                )
+                api_logger.info(f"Created portal session for customer {subscription.stripe_customer_id}")
+                return Response({'portal_url': portal_session.url})
 
-            return Response({'portal_url': portal_session.url})
+            except StripeError as e:
+                api_logger.error(f"Failed to create portal session: {e}")
+                return Response(
+                    {'error': 'ポータルセッションの作成に失敗しました'}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            api_logger.error(f"Unexpected error in manage_portal: {e}")
+            return Response(
+                {'error': 'システムエラーが発生しました'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -300,39 +357,78 @@ class StripeWebhookView(View):
         stripe.api_key = settings.STRIPE_SECRET_KEY
         webhook_secret = settings.STRIPE_WEBHOOK_SECRET
 
+        if not webhook_secret:
+            api_logger.error("Stripe webhook secret is not configured")
+            return HttpResponse(status=400)
+
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+
+        if not sig_header:
+            api_logger.error("Missing Stripe signature header")
+            return HttpResponse(status=400)
 
         try:
             event = stripe.Webhook.construct_event(
                 payload, sig_header, webhook_secret
             )
+            api_logger.info(f"Received Stripe webhook: {event['type']}")
         except ValueError as e:
+            api_logger.error(f"Invalid payload: {e}")
             return HttpResponse(status=400)
         except stripe.error.SignatureVerificationError as e:
+            api_logger.error(f"Invalid signature: {e}")
             return HttpResponse(status=400)
 
-        if event['type'] == 'checkout.session.completed':
-            session = event['data']['object']
-            fulfill_subscription(session)
-        elif event['type'] == 'customer.subscription.updated':
-            subscription = event['data']['object']
-            update_subscription(subscription)
-        elif event['type'] == 'customer.subscription.deleted':
-            subscription = event['data']['object']
-            cancel_subscription(subscription)
+        try:
+            api_logger.info(f"Processing webhook event: {event['type']}")
+            api_logger.debug(f"Webhook event data: {event['data']}")
+            
+            if event['type'] == 'checkout.session.completed':
+                session = event['data']['object']
+                api_logger.info(f"Processing checkout.session.completed for session {session.get('id')}")
+                fulfill_subscription(session)
+            elif event['type'] == 'customer.subscription.updated':
+                subscription = event['data']['object']
+                api_logger.info(f"Processing customer.subscription.updated for subscription {subscription.get('id')}")
+                update_subscription(subscription)
+            elif event['type'] == 'customer.subscription.deleted':
+                subscription = event['data']['object']
+                api_logger.info(f"Processing customer.subscription.deleted for subscription {subscription.get('id')}")
+                cancel_subscription(subscription)
+            elif event['type'] == 'invoice.payment_failed':
+                invoice = event['data']['object']
+                api_logger.warning(f"Payment failed for invoice {invoice['id']}")
+            elif event['type'] == 'invoice.payment_succeeded':
+                invoice = event['data']['object']
+                api_logger.info(f"Payment succeeded for invoice {invoice['id']}")
+            else:
+                api_logger.info(f"Unhandled webhook event: {event['type']}")
+
+        except Exception as e:
+            api_logger.error(f"Error processing webhook {event['type']}: {e}")
+            api_logger.error(f"Exception details: {str(e)}")
+            import traceback
+            api_logger.error(f"Traceback: {traceback.format_exc()}")
+            return HttpResponse(status=500)
 
         return HttpResponse(status=200)
 
 
 def fulfill_subscription(session):
     """チェックアウト完了時の処理"""
+    api_logger.info(f"Starting fulfill_subscription for session {session.get('id')}")
+    api_logger.debug(f"Session data: {session}")
+    
     org_id = session.get('metadata', {}).get('organization_id')
     plan_id = session.get('metadata', {}).get('plan_id')
+    
+    api_logger.info(f"Organization ID: {org_id}, Plan ID: {plan_id}")
 
     try:
         organization = Organization.objects.get(id=org_id)
         plan = SubscriptionPlan.objects.get(id=plan_id)
+        api_logger.info(f"Found organization: {organization.name}, plan: {plan.name}")
 
         subscription, created = Subscription.objects.get_or_create(
             organization=organization,
@@ -344,11 +440,15 @@ def fulfill_subscription(session):
             }
         )
 
-        if not created:
+        if created:
+            api_logger.info(f"New subscription created for organization {organization.id} with plan {plan.id}")
+        else:
+            api_logger.info(f"Existing subscription found for organization {organization.id}. Current plan: {subscription.plan.id if subscription.plan else 'None'}")
             subscription.plan = plan
             subscription.status = Subscription.Status.ACTIVE
             subscription.stripe_subscription_id = session.get('subscription')
             subscription.save()
+            api_logger.info(f"Existing subscription updated to plan {subscription.plan.id}")
 
         stripe_subscription = stripe.Subscription.retrieve(session.get('subscription'))
 
@@ -362,6 +462,10 @@ def fulfill_subscription(session):
 
     except (Organization.DoesNotExist, SubscriptionPlan.DoesNotExist) as e:
         api_logger.error(f"Error processing subscription fulfillment: {e}")
+        api_logger.error(f"Organization ID from metadata: {org_id}")
+        api_logger.error(f"Plan ID from metadata: {plan_id}")
+        api_logger.error(f"Available organizations: {list(Organization.objects.values_list('id', 'name'))}")
+        api_logger.error(f"Available plans: {list(SubscriptionPlan.objects.values_list('id', 'name'))}")
 
 
 def update_subscription(stripe_subscription):
@@ -384,6 +488,18 @@ def update_subscription(stripe_subscription):
 
         # サブスクリプションIDを必ず更新
         subscription.stripe_subscription_id = stripe_subscription['id']
+
+        # プラン情報の更新
+        if stripe_subscription.get('plan') and stripe_subscription['plan'].get('id'):
+            try:
+                stripe_price_id = stripe_subscription['plan']['id']
+                plan = SubscriptionPlan.objects.get(stripe_price_id=stripe_price_id)
+                subscription.plan = plan
+                api_logger.info(f"Subscription plan updated to {plan.id} for subscription {subscription.id}")
+            except SubscriptionPlan.DoesNotExist:
+                api_logger.error(f"SubscriptionPlan with stripe_price_id {stripe_price_id} not found.")
+        else:
+            api_logger.warning(f"No plan information found in stripe_subscription object for subscription {subscription.id}")
 
         # ステータス更新
         if stripe_subscription['status'] == 'active':

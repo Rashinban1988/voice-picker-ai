@@ -129,14 +129,23 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         user = request.user
         organization = user.organization
 
-        # 今月作成分だけをフィルタリング
-        now = timezone.now()
-        uploaded_files = UploadedFile.objects.filter(
-            organization=organization,
-            exist=True,
-            created_at__year=now.year,
-            created_at__month=now.month
-        )
+        subscription = organization.get_subscription()
+        if subscription and subscription.is_active() and subscription.is_within_contract_period():
+            uploaded_files = UploadedFile.objects.filter(
+                organization=organization,
+                exist=True,
+                created_at__gte=subscription.current_period_start,
+                created_at__lte=subscription.current_period_end
+            )
+        else:
+            # サブスクリプションがない、または無効な場合は、現在の月でフィルタリング
+            now = timezone.now()
+            uploaded_files = UploadedFile.objects.filter(
+                organization=organization,
+                exist=True,
+                created_at__year=now.year,
+                created_at__month=now.month
+            )
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
 
         max_duration = organization.get_max_duration()
@@ -701,12 +710,8 @@ def transcribe_without_diarization(file_path, uploaded_file_id, is_free_user: bo
             temp_file_path, file_extension = process_audio(file_path, file_extension)
             is_wav_file = False
 
-        # Whisperで文字起こしを実行 有料ユーザーの場合はopenaiのapiを使用
-        if is_free_user:
-            whisper_model = get_whisper_model()
-            all_result = whisper_model.transcribe(temp_file_path, language="ja")
-        else:
-            all_result = transcribe_openai(temp_file_path)
+        # Whisperで文字起こしを実行
+        all_result = transcribe_openai(temp_file_path)
 
         # 30秒制限でセグメントをまとめる
         segment_limit_time = 30  # 30秒の制限
