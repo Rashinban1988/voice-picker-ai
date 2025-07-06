@@ -6,6 +6,140 @@
 
 **現在の状況**: 10件のテストがすべて成功し、Stripe APIをモック化することで安定したテスト環境が構築されています。
 
+## 本番運用前チェックリスト
+
+### 🔒 セキュリティ設定
+
+- [x] HTTPS強制リダイレクト設定
+- [x] セキュリティヘッダー設定
+- [x] CORS設定
+- [x] Webhook署名検証
+- [ ] **本番環境での追加セキュリティ設定**
+
+```python
+# settings.py 本番環境用追加設定
+if not DEBUG:
+    # HTTPS設定
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1年
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # セッション設定
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # その他のセキュリティ設定
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+```
+
+### 🌐 本番環境設定
+
+- [ ] **Stripe本番環境キーの設定**
+- [ ] **本番Webhookエンドポイントの設定**
+- [ ] **ドメイン設定の確認**
+
+```bash
+# 本番環境変数設定例
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+DEBUG=False
+ALLOWED_HOSTS=voice-picker-ai.com,django.voice-picker-ai.com
+```
+
+### 📊 監視・ログ設定
+
+- [x] 日次ログローテーション
+- [x] 30日間バックアップ保持
+- [ ] **本番環境でのログ監視設定**
+
+```python
+# 本番環境用ログ設定
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] - %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'django_file': {
+            'level': 'WARNING',  # 本番ではWARNING以上
+            'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'filename': os.path.join(LOGS_DIR, 'django'),
+            'formatter': 'verbose',
+            'when': 'midnight',
+            'backupCount': 30,
+        },
+        'stripe_file': {
+            'level': 'INFO',
+            'class': 'config.logging_handlers.DailyRotatingFileHandler',
+            'filename': os.path.join(LOGS_DIR, 'stripe'),
+            'formatter': 'verbose',
+            'when': 'midnight',
+            'backupCount': 90,  # Stripeログは90日間保持
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['django_file'],
+            'level': 'WARNING',
+            'propagate': True,
+        },
+        'member_management.views': {
+            'handlers': ['stripe_file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
+```
+
+### 🔄 バックアップ・復旧
+
+- [ ] **データベースバックアップ設定**
+- [ ] **Stripeデータ同期確認**
+- [ ] **障害復旧手順書作成**
+
+```bash
+# データベースバックアップ例
+#!/bin/bash
+# backup_db.sh
+
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backup/database"
+DB_NAME="your_db_name"
+
+# バックアップ作成
+mysqldump -u $DB_USER -p$DB_PASSWORD $DB_NAME > $BACKUP_DIR/backup_$DATE.sql
+
+# 7日以上古いバックアップを削除
+find $BACKUP_DIR -name "backup_*.sql" -mtime +7 -delete
+```
+
+### 📈 パフォーマンス最適化
+
+- [ ] **データベースインデックス最適化**
+- [ ] **キャッシュ設定**
+- [ ] **CDN設定**
+
+```python
+# キャッシュ設定例
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
+}
+```
+
 ## テストの種類
 
 ### 1. ユニットテスト
@@ -380,4 +514,36 @@ echo "テスト完了"
 
 - 🔄 UUID形式エラーのハンドリング改善
 - 🔄 より詳細なWebhook処理ログ
-- 🔄 パフォーマンス最適化 
+- 🔄 パフォーマンス最適化
+
+## 本番運用準備状況
+
+### ✅ 準備完了
+
+- **セキュリティ**: HTTPS、セキュリティヘッダー、CORS設定済み
+- **Stripe機能**: 基本機能、Webhook処理、エラーハンドリング実装済み
+- **ログ**: 日次ローテーション、バックアップ保持設定済み
+- **テスト**: 10件のテストが成功、モック化による安定性確保
+
+### ⚠️ 本番運用前に必要な作業
+
+1. **本番環境設定**
+   - Stripe本番環境キーの設定
+   - 本番Webhookエンドポイントの設定
+   - ドメイン設定の確認
+
+2. **セキュリティ強化**
+   - 本番環境用セキュリティ設定の追加
+   - セッション設定の強化
+
+3. **監視・バックアップ**
+   - 本番環境でのログ監視設定
+   - データベースバックアップ設定
+   - 障害復旧手順書作成
+
+4. **パフォーマンス最適化**
+   - データベースインデックス最適化
+   - キャッシュ設定
+   - CDN設定
+
+**結論**: 基本的な機能は実装済みですが、本番運用には上記の追加作業が必要です。 
