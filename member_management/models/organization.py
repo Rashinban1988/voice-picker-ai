@@ -57,7 +57,7 @@ class Organization(models.Model):
         subscription = self.get_subscription()
         if subscription and subscription.is_active() and subscription.plan and subscription.is_within_contract_period():
             return subscription.plan.max_duration
-        return 100  # デフォルト値
+        return 30  # デフォルト値
 
     def __str__(self):
         return f"Organization: {self.name}"
