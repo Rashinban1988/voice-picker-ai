@@ -205,6 +205,20 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         user = self.request.user
         return Subscription.objects.filter(organization=user.organization)
 
+    def list(self, request, *args, **kwargs):
+        """組織のサブスクリプション情報を単一オブジェクトとして返す"""
+        queryset = self.get_queryset()
+        api_logger.info(f"Subscription list request for user {request.user.id}, organization {request.user.organization.id}")
+        
+        if queryset.exists():
+            instance = queryset.first()
+            serializer = self.get_serializer(instance)
+            api_logger.info(f"Found subscription: {instance.id}, status: {instance.status}")
+            return Response(serializer.data)
+        else:
+            api_logger.info("No subscription found for organization")
+            return Response(None)
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
