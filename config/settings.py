@@ -27,14 +27,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY')
-NEXT_JS_HOST = config('NEXT_JS_HOST')
-NEXT_JS_PORT = config('NEXT_JS_PORT')
+NEXT_JS_HOST = config('NEXT_JS_HOST', default='http://localhost')
+NEXT_JS_PORT = config('NEXT_JS_PORT', default='3000')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 # SpeechBrainの設定を最適化
 SPEECHBRAIN_DEV_MODE = True  # 開発モードを有効化
 SPEECHBRAIN_DISABLE_QUIRKS = True  # 不要な機能を無効化
+
+# Celery設定
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Tokyo'
 
 allowed_hosts = config('ALLOWED_HOSTS', default='*')
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts.split(',')]
@@ -50,6 +58,9 @@ if DEBUG:
         "http://localhost:3000",    # 開発時
         "http://127.0.0.1:3000",    # 開発時
     ]
+    # 開発時の全許可設定
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_CREDENTIALS = True
 
