@@ -8,13 +8,15 @@ import warnings
 import re
 import webvtt
 import uuid
+import random
+from typing import Optional
 from moviepy.editor import VideoFileClip
 # import wave
 
 import numpy as np
 import noisereduce as nr
 from functools import lru_cache
-# from celery import shared_task
+from celery import shared_task
 from django.db import transaction
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.views import View
@@ -54,7 +56,7 @@ django_logger = logging.getLogger('django')
 api_logger = logging.getLogger('api')
 processing_logger = logging.getLogger('processing')
 
-# @lru_cache(maxsize=1)
+@lru_cache(maxsize=1)
 def get_whisper_model():
     # オープンソースWhisperモデルのロード
     # GPUを使用する場合
@@ -70,6 +72,84 @@ def get_whisper_model():
 def get_diarization_model():
     diarization_model = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', use_auth_token=pyannote_auth_token)
     return diarization_model
+
+def openai_transcribe_with_retry(file_path: str, max_retries: int = 5) -> Optional[dict]:
+    """
+    OpenAI APIでのレート制限対策付き文字起こし処理
+
+    Args:
+        file_path (str): 音声ファイルのパス
+        max_retries (int): 最大リトライ回数
+
+    Returns:
+        Optional[dict]: 文字起こし結果、失敗時はNone
+    """
+    for attempt in range(max_retries):
+        try:
+            # Exponential backoff with jitter
+            if attempt > 0:
+                base_delay = min(60, 2 ** attempt)  # 最大60秒
+                jitter = random.uniform(0.1, 0.5)
+                delay = base_delay + jitter
+                processing_logger.info(f"リトライ {attempt}/{max_retries}: {delay:.1f}秒待機中...")
+                time.sleep(delay)
+
+            # API呼び出し
+            with open(file_path, "rb") as audio_file:
+                response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="ja",
+                    response_format="verbose_json"
+                )
+
+            # 成功時は結果を返す
+            result = {
+                "text": response.text,
+                "segments": [
+                    {
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text
+                    }
+                    for segment in response.segments
+                ]
+            }
+
+            # レート制限対策：成功した場合も少し待機
+            if attempt > 0:  # リトライ後の成功の場合
+                time.sleep(1)
+            else:  # 初回成功の場合
+                time.sleep(0.5)
+
+            return result
+
+        except Exception as e:
+            error_str = str(e).lower()
+
+            # 429エラー（レート制限）の場合
+            if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
+                processing_logger.warning(f"レート制限エラー (attempt {attempt + 1}/{max_retries}): {e}")
+
+                # 最後の試行の場合はNoneを返す
+                if attempt == max_retries - 1:
+                    processing_logger.error(f"最大リトライ回数に達しました: {file_path}")
+                    return None
+
+                # レート制限の場合は長めに待機
+                if "quota" in error_str:
+                    processing_logger.error(f"クォータ制限に達しました。APIキーと課金設定を確認してください: {e}")
+                    return None
+
+                continue
+
+            # その他のエラーの場合
+            else:
+                processing_logger.error(f"API呼び出しエラー: {e}")
+                return None
+
+    processing_logger.error(f"すべてのリトライが失敗しました: {file_path}")
+    return None
 
 class EnvironmentViewSet(viewsets.ModelViewSet):
     queryset = Environment.objects.all()
@@ -192,7 +272,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
 
         try:
             file_size = os.path.getsize(file_path)
-            
+
             mime_types = {
                 '.mp3': 'audio/mpeg',
                 '.wav': 'audio/wav',
@@ -212,17 +292,17 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 if range_match:
                     start = int(range_match.group(1))
                     end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
-                    
+
                     if start >= file_size:
                         return HttpResponse(status=416)
-                    
+
                     end = min(end, file_size - 1)
                     content_length = end - start + 1
-                    
+
                     with open(file_path, 'rb') as f:
                         f.seek(start)
                         data = f.read(content_length)
-                    
+
                     response = HttpResponse(
                         data,
                         status=206,
@@ -232,7 +312,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                     response['Content-Length'] = str(content_length)
                     response['Accept-Ranges'] = 'bytes'
                     response['Content-Disposition'] = f'inline; filename="{filename}"'
-                    
+
                     api_logger.info(f"Range request: {start}-{end}/{file_size} for {filename}")
                     return response
 
@@ -271,12 +351,12 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         if file_serializer.is_valid():
             try:
                 uploaded_file = file_serializer.save(organization_id=organization_id)
-                
+
                 file_path = uploaded_file.file.path
                 if os.path.exists(file_path):
                     file_extension = os.path.splitext(file_path)[1].lower()
                     supported_extensions = ['.mp3', '.wav', '.ogg', '.m4a', '.mp4', '.avi', '.mov', '.wmv']
-                    
+
                     if file_extension in supported_extensions:
                         processing_logger.info(f"Improving audio index for: {file_path}")
                         improve_audio_index(file_path)
@@ -293,8 +373,9 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-            # 文字起こし処理を非同期で実行 Celeryを使う場合
-            # transcribe_and_save_async.delay(temp_file_path, uploaded_file.id)
+            # 文字起こし処理を非同期で実行
+            from .tasks import transcribe_and_save_async
+            transcribe_and_save_async.delay(uploaded_file.file.path, uploaded_file.id)
 
             return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
         else:
@@ -364,7 +445,7 @@ class TranscriptionSaveViewSet(viewsets.ViewSet):
 
             # 処理ステータスの更新
             UploadedFile.objects.filter(id=uploaded_file_id).update(
-                status = Status.PROCESSED
+                status = Status.COMPLETED
             )
 
             return Response(
@@ -421,6 +502,23 @@ def process_audio(file_path, file_extension):
     if file_extension == ".wav":
         return file_path, file_extension
 
+    # メモリ効率化のため、大きなファイルは分割処理
+    file_size = os.path.getsize(file_path)
+    max_chunk_size = 100 * 1024 * 1024  # 100MB
+
+    try:
+        if file_size > max_chunk_size:
+            # 大きなファイルは分割処理
+            return process_large_audio_file(file_path, file_extension)
+        else:
+            # 通常処理
+            return process_normal_audio_file(file_path, file_extension)
+    except Exception as e:
+        processing_logger.error(f"Audio processing failed: {e}")
+        raise
+
+def process_normal_audio_file(file_path, file_extension):
+    """通常サイズのファイル処理"""
     # 音声ファイルを読み込む
     audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""), frame_rate=16000, sample_width=2, channels=1)
     processing_logger.info(f"audio: {audio}")
@@ -428,8 +526,8 @@ def process_audio(file_path, file_extension):
     # 音声の正規化
     audio = audio.normalize()
 
-    # ノイズ除去
-    samples = np.array(audio.get_array_of_samples())
+    # ノイズ除去（メモリ使用量を抑制）
+    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)  # float32で精度を保ちつつメモリ節約
 
     # CPUのみで動作するように設定（GPUエラーを回避）
     reduced_noise = nr.reduce_noise(
@@ -457,15 +555,12 @@ def process_audio(file_path, file_extension):
         channels=audio.channels
     )
 
-    # 音声の正規化
-    # audio = audio.normalize()
-
     # 新しいファイル名を作成
     new_file_path = file_path.rsplit(".", 1)[0] + ".wav"
 
     # WAV形式でエクスポート
     try:
-        audio.export(new_file_path, format="wav")  # 新しいファイル名を指定
+        audio.export(new_file_path, format="wav")
     except Exception as e:
         raise RuntimeError(f"ファイルのエクスポートに失敗しました: {e}")
 
@@ -473,6 +568,20 @@ def process_audio(file_path, file_extension):
     if not os.path.exists(new_file_path):
         raise FileNotFoundError(f"エクスポートされたファイルが見つかりません: {new_file_path}")
 
+    return new_file_path, ".wav"
+
+def process_large_audio_file(file_path, file_extension):
+    """大きなファイルの分割処理"""
+    processing_logger.info("Processing large audio file in chunks")
+
+    # 一時的に元のファイルを16kHz WAVに変換（ノイズ除去は省略）
+    temp_audio = AudioSegment.from_file(file_path, format=file_extension.replace(".", ""))
+    temp_audio = temp_audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+
+    new_file_path = file_path.rsplit(".", 1)[0] + ".wav"
+    temp_audio.export(new_file_path, format="wav")
+
+    processing_logger.info(f"Large file converted without noise reduction: {new_file_path}")
     return new_file_path, ".wav"
 
 def millisec(timeStr):
@@ -556,8 +665,6 @@ def save_transcription(transcription_text, start, uploaded_file_id, speaker):
     except Exception as e:
         processing_logger.error(f"Error saving transcription: {e}")
 
-# @shared_task # Celeryを使う場合コメントアウトを外す
-# def transcribe_and_save_async(file_path, uploaded_file_id):
 def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
     """
     音声、動画ファイルから文字起こしを行い、transcriptionテーブルに保存する。
@@ -579,7 +686,8 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
             temp_file_path, file_extension = process_audio(file_path, file_extension)
             is_wav_file = False
         # pyannoteでダイアライゼーション（話者分離）を行う
-        diarization = perform_diarization(temp_file_path)
+        diarization_model = get_diarization_model()
+        diarization = diarization_model(temp_file_path)
         # save_diarization_output(diarization) # テスト用
 
         audio = Audio(sample_rate=16000, mono=True)
@@ -594,6 +702,11 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         temp_segment_transcription_text = ""
         temp_segment_start_time = 0
         temp_segment_speaker = ""
+
+        # 一時ファイルの削除を保証するためtry-finally構文を追加
+        temp_files_to_cleanup = []
+        if not is_wav_file and temp_file_path != file_path:
+            temp_files_to_cleanup.append(temp_file_path)
         # for segment, _, speaker in diarization.itertracks(yield_label=True):
         #     # セグメントの開始時間と終了時間を取得
         #     segment_start_time = segment.start
@@ -680,13 +793,21 @@ def transcribe_and_save(file_path: str, uploaded_file_id: int) -> bool:
         # 最後のセグメントが残っている場合は保存
         if temp_segment_transcription_text != "":
             save_transcription(temp_segment_transcription_text, temp_segment_start_time, uploaded_file_id, temp_segment_speaker)
-        # ファイルを削除
-        if not is_wav_file:
-            os.remove(temp_file_path)
+
         return True
+
     except Exception as e:
         processing_logger.error(f"エラーが発生しました: {e}")
         return False
+    finally:
+        # 一時ファイルのクリーンアップ
+        for temp_file in temp_files_to_cleanup:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+                    processing_logger.info(f"一時ファイルを削除しました: {temp_file}")
+            except OSError as e:
+                processing_logger.warning(f"一時ファイルの削除に失敗しました: {temp_file}, エラー: {e}")
 
 def transcribe_without_diarization(file_path, uploaded_file_id, is_free_user: bool = False):
     """
@@ -956,26 +1077,11 @@ def transcribe_openai(file_path: str) -> dict:
         file_size_mb = get_file_size_mb(file_path)
 
         if file_size_mb <= 24.0:  # 安全マージンとして24MB以下
-            # 25MB以下なら通常通り処理
-            response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=open(file_path, "rb"),
-                language="ja",
-                response_format="verbose_json"
-            )
-
-            # TranscriptionVerboseオブジェクトを辞書形式に変換
-            return {
-                "text": response.text,
-                "segments": [
-                    {
-                        "start": segment.start,
-                        "end": segment.end,
-                        "text": segment.text
-                    }
-                    for segment in response.segments
-                ]
-            }
+            # 25MB以下なら通常通り処理（レート制限対策付き）
+            result = openai_transcribe_with_retry(file_path)
+            if result is None:
+                raise Exception("OpenAI APIでの文字起こしに失敗しました")
+            return result
         else:
             # 25MBを超える場合は分割処理
             processing_logger.info(f"ファイルサイズが{file_size_mb:.2f}MBのため、分割処理を実行します")
@@ -985,80 +1091,60 @@ def transcribe_openai(file_path: str) -> dict:
             processing_logger.info(f"音声ファイルを{len(split_files)}個に分割しました")
 
             if len(split_files) == 1:
-                # 分割できなかった場合は通常処理
-                response = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=open(file_path, "rb"),
-                    language="ja",
-                    response_format="verbose_json"
-                )
-
-                return {
-                    "text": response.text,
-                    "segments": [
-                        {
-                            "start": segment.start,
-                            "end": segment.end,
-                            "text": segment.text
-                        }
-                        for segment in response.segments
-                    ]
-                }
+                # 分割できなかった場合は通常処理（レート制限対策付き）
+                result = openai_transcribe_with_retry(file_path)
+                if result is None:
+                    raise Exception("OpenAI APIでの文字起こしに失敗しました")
+                return result
 
             # 各分割ファイルを処理
             results = []
             time_offsets = []
             audio = AudioSegment.from_file(file_path)
 
+            failed_files = []
+
             for i, split_file in enumerate(split_files):
                 try:
                     processing_logger.info(f"分割ファイル {i+1}/{len(split_files)} を処理中...")
 
-                    # 分割ファイルの文字起こし
-                    response = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=open(split_file, "rb"),
-                        language="ja",
-                        response_format="verbose_json"
-                    )
+                    # レート制限対策付きで分割ファイルの文字起こし
+                    result_dict = openai_transcribe_with_retry(split_file)
+
+                    if result_dict is None:
+                        processing_logger.error(f"分割ファイル {split_file} の文字起こしに失敗しました")
+                        failed_files.append(split_file)
+                        continue
 
                     # 時間オフセットを計算
                     split_audio = AudioSegment.from_file(split_file)
                     time_offset = len(audio[:len(audio) * i // len(split_files)]) / 1000.0
 
-                    # 結果を辞書形式に変換
-                    result_dict = {
-                        "text": response.text,
-                        "segments": [
-                            {
-                                "start": segment.start,
-                                "end": segment.end,
-                                "text": segment.text
-                            }
-                            for segment in response.segments
-                        ]
-                    }
-
                     results.append(result_dict)
                     time_offsets.append(time_offset)
 
-                    # 一時ファイルを削除
-                    os.remove(split_file)
+                    processing_logger.info(f"分割ファイル {i+1}/{len(split_files)} の処理が完了しました")
 
                 except Exception as e:
                     processing_logger.error(f"分割ファイル {split_file} の処理中にエラーが発生しました: {e}")
+                    failed_files.append(split_file)
+                finally:
                     # 一時ファイルを削除
                     if os.path.exists(split_file):
                         os.remove(split_file)
-                    continue
 
-            # 結果を結合
+            # 結果の処理
             if results:
+                if failed_files:
+                    processing_logger.warning(f"分割ファイルのうち {len(failed_files)}/{len(split_files)} 個の処理に失敗しました")
+                    processing_logger.warning(f"成功: {len(results)}/{len(split_files)} 個のファイル")
+
                 merged_result = merge_transcription_results(results, time_offsets)
                 processing_logger.info("分割された文字起こし結果を結合しました")
                 return merged_result
             else:
                 processing_logger.error("すべての分割ファイルの処理に失敗しました")
+                processing_logger.error("対処方法: 1) OpenAI APIキーを確認 2) 課金設定を確認 3) 使用量制限を確認")
                 return {"text": "", "segments": []}
 
     except Exception as e:
@@ -1083,7 +1169,7 @@ def text_generation_save(uploaded_file: UploadedFile) -> Union[UploadedFile, boo
         transcriptions = uploaded_file.transcription.all()
 
         if not transcriptions.exists():
-            logger.warning(f"文字起こしデータがありません。uploaded_file_id: {uploaded_file.id}")
+            processing_logger.warning(f"文字起こしデータがありません。uploaded_file_id: {uploaded_file.id}")
             return False
 
         all_transcription_text = "".join(transcription.text for transcription in transcriptions)
@@ -1492,19 +1578,19 @@ def improve_audio_index(file_path: str) -> bool:
     """
     音声・動画ファイルのインデックス情報を改善してシーク精度を向上させる。
     元のファイル形式は変更せず、メタデータのみを最適化する。
-    
+
     Args:
         file_path (str): 音声・動画ファイルのパス
-    
+
     Returns:
         bool: 成功した場合True、失敗した場合False
     """
     try:
         import subprocess
-        
+
         file_extension = os.path.splitext(file_path)[1].lower()
         temp_path = file_path + '.tmp'
-        
+
         if file_extension in ['.mp3']:
             cmd = [
                 'ffmpeg', '-i', file_path,
@@ -1535,14 +1621,14 @@ def improve_audio_index(file_path: str) -> bool:
         else:
             processing_logger.warning(f"Unsupported format for index improvement: {file_extension}")
             return False
-        
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=300
         )
-        
+
         if result.returncode == 0:
             os.replace(temp_path, file_path)
             processing_logger.info(f"Audio index improved for: {file_path}")
@@ -1552,7 +1638,7 @@ def improve_audio_index(file_path: str) -> bool:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             return False
-            
+
     except Exception as e:
         processing_logger.error(f"Error improving audio index for {file_path}: {e}")
         if 'temp_path' in locals() and os.path.exists(temp_path):

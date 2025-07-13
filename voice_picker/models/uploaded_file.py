@@ -30,8 +30,8 @@ def organization_upload_to(instance, filename):
 
 class Status(models.IntegerChoices):
     UNPROCESSED = 0, _('未処理')
-    IN_PROGRESS = 1, _('処理中')
-    PROCESSED = 2, _('処理済み')
+    PROCESSING = 1, _('処理中')
+    COMPLETED = 2, _('処理済み')
     ERROR = 3, _('エラー')
 
 class UploadedFile(models.Model):
