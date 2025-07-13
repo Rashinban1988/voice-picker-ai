@@ -27,8 +27,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY')
-NEXT_JS_HOST = config('NEXT_JS_HOST')
-NEXT_JS_PORT = config('NEXT_JS_PORT')
+NEXT_JS_HOST = config('NEXT_JS_HOST', default='http://localhost')
+NEXT_JS_PORT = config('NEXT_JS_PORT', default='3000')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
