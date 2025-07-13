@@ -312,6 +312,9 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                     response['Content-Length'] = str(content_length)
                     response['Accept-Ranges'] = 'bytes'
                     response['Content-Disposition'] = f'inline; filename="{filename}"'
+                    response['Access-Control-Allow-Origin'] = '*'
+                    response['Access-Control-Allow-Credentials'] = 'true'
+                    response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Range'
 
                     api_logger.info(f"Range request: {start}-{end}/{file_size} for {filename}")
                     return response
@@ -326,6 +329,9 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             response['Cache-Control'] = 'public, max-age=31536000, immutable'
             response['ETag'] = f'"{instance.id}"'
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Credentials'] = 'true'
+            response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, Range'
 
             api_logger.info(f"Full file response: {filename} ({file_size} bytes)")
             return response
