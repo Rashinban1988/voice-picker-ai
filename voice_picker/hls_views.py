@@ -56,6 +56,10 @@ def serve_hls_content(request, file_id, filename):
     if filename == 'master.m3u8':
         return generate_dynamic_master_playlist(file_id, expires, signature)
 
+    # 個別playlist.m3u8の場合も動的生成（セグメントに署名追加）
+    if filename.endswith('/playlist.m3u8'):
+        return generate_dynamic_variant_playlist(file_id, filename, expires, signature)
+
     # HLSファイルパス構築
     hls_path = os.path.join(settings.MEDIA_ROOT, 'hls', str(file_id), filename)
 
@@ -139,3 +143,56 @@ def generate_dynamic_master_playlist(file_id, expires, signature):
     response['Cache-Control'] = 'max-age=300'  # 5分間キャッシュ
 
     return response
+
+
+def generate_dynamic_variant_playlist(file_id, filename, expires, signature):
+    """
+    署名付きセグメントURLを含む動的variant playlist.m3u8生成
+    """
+    # ファイルパス構築
+    hls_path = os.path.join(settings.MEDIA_ROOT, 'hls', str(file_id), filename)
+
+    if not os.path.exists(hls_path):
+        raise Http404("Playlist file not found")
+
+    try:
+        # 元のplaylist.m3u8を読み込み
+        with open(hls_path, 'r') as f:
+            original_content = f.read()
+
+        # セグメントURLに署名を追加して書き換え
+        lines = original_content.split('\n')
+        modified_lines = []
+
+        for line in lines:
+            # セグメントファイル（.ts）の行を検出
+            if line.strip().endswith('.ts'):
+                # セグメントファイル名を取得
+                segment_filename = line.strip()
+                # バリアント名（360p, 720p）を取得
+                variant_name = filename.split('/')[0]  # "360p/playlist.m3u8" → "360p"
+
+                # 署名付きセグメントURL生成
+                signed_segment_url = generate_signed_url(
+                    file_id,
+                    f"{variant_name}/{segment_filename}",
+                    expires
+                )
+                modified_lines.append(signed_segment_url)
+            else:
+                # セグメント以外の行はそのまま
+                modified_lines.append(line)
+
+        # 修正されたプレイリスト内容
+        modified_content = '\n'.join(modified_lines)
+
+        # レスポンス生成
+        response = HttpResponse(modified_content, content_type='application/x-mpegURL')
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Cache-Control'] = 'max-age=300'  # 5分間キャッシュ
+
+        return response
+
+    except Exception as e:
+        api_logger.error(f"Failed to generate dynamic variant playlist: {e}")
+        raise Http404("Failed to generate playlist")
