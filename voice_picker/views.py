@@ -1431,7 +1431,7 @@ def summarize_text(text: str) -> str:
                 {"role": "system", "content": "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"},
                 {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"}
             ],
-            max_tokens=500  # 応答の最大長を制限
+            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1454,7 +1454,7 @@ def definition_issue(text: str) -> str:
                 {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
                 {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
             ],
-            max_tokens=500  # 応答の最大長を制限
+            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1477,7 +1477,7 @@ def definition_solution(text: str) -> str:
                 {"role": "system", "content": "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
                 {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
             ],
-            max_tokens=500  # 応答の最大長を制限
+            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1500,7 +1500,7 @@ def create_meeting_minutes(text: str) -> str:
                 {"role": "system", "content": "あなたは文章を分析し、議事録を作成する専門家です。応答は必ずマークダウン形式で出力してください。"},
                 {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で議事録を作成してください：\\n\\n{text}"}
             ],
-            max_tokens=500  # 応答の最大長を制限
+            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1518,11 +1518,33 @@ def summarize_text_with_instruction(text: str, instruction: str = "") -> str:
         str: マークダウン形式で要約されたテキスト
     """
     try:
-        base_prompt = "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"
-        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"
+        base_prompt = "あなたは会議内容を分析し、包括的な要約を作成する専門家です。応答は必ずマークダウン形式で、構造化された内容で出力してください。"
+        user_prompt = f"""以下の会議内容を分析し、マークダウン形式で要約を作成してください。
+
+以下の構造で出力してください：
+# 会議要約
+
+## 会議概要
+（会議の目的と全体的な内容を2-3文で要約）
+
+## 主要な議題
+1. **議題名**: 内容の説明
+2. **議題名**: 内容の説明
+（必要に応じて追加）
+
+## 決定事項
+- 具体的な決定内容
+- 承認された事項
+（箇条書きで列挙）
+
+## 次回アクション
+今後の取り組みや次回までのアクションアイテムを記載
+
+会議内容：
+{text}"""
 
         if instruction.strip():
-            user_prompt += f"\\n\\n追加の指示: {instruction}"
+            user_prompt += f"\n\n追加の指示: {instruction}"
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -1530,7 +1552,7 @@ def summarize_text_with_instruction(text: str, instruction: str = "") -> str:
                 {"role": "system", "content": base_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=500
+            max_tokens=1500
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1548,11 +1570,38 @@ def definition_issue_with_instruction(text: str, instruction: str = "") -> str:
         str: マークダウン形式で主要な課題点
     """
     try:
-        base_prompt = "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
-        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
+        base_prompt = "あなたは会議内容を分析し、重要度別に課題を特定・分類する専門家です。応答は必ずマークダウン形式で出力してください。"
+        user_prompt = f"""以下の会議内容を分析し、重要度別に課題を特定してマークダウン形式で出力してください。
+
+以下の構造で出力してください：
+# 特定された課題
+
+## 緊急度の高い課題
+
+### 1. 課題名
+- **問題**: 具体的な問題の説明
+- **影響**: この課題が与える影響
+- **期限**: 対応期限（判明している場合）
+
+## 中程度の課題
+
+### 2. 課題名
+- **問題**: 具体的な問題の説明
+- **影響**: この課題が与える影響
+- **対応**: 必要な対応策
+
+## 軽微な課題
+
+### 3. 課題名
+- **問題**: 具体的な問題の説明
+- **影響**: この課題が与える影響
+- **対応**: 推奨される対応策
+
+会議内容：
+{text}"""
 
         if instruction.strip():
-            user_prompt += f"\\n\\n追加の指示: {instruction}"
+            user_prompt += f"\n\n追加の指示: {instruction}"
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -1560,7 +1609,7 @@ def definition_issue_with_instruction(text: str, instruction: str = "") -> str:
                 {"role": "system", "content": base_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=500
+            max_tokens=1500
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
@@ -1578,11 +1627,50 @@ def definition_solution_with_instruction(text: str, instruction: str = "") -> st
         str: マークダウン形式で取り組み案
     """
     try:
-        base_prompt = "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"
-        user_prompt = f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"
+        base_prompt = "あなたは会議内容を分析し、実行可能な改善施策を時間軸別に提案する専門家です。応答は必ずマークダウン形式で出力してください。"
+        user_prompt = f"""以下の会議内容を分析し、改善提案・取り組み案をマークダウン形式で出力してください。
+
+以下の構造で出力してください：
+# 改善提案・取り組み案
+
+## 重点的な取り組み
+
+### 1. 施策名
+**目標**: 達成したい目標
+- **短期施策**:
+  - 具体的なアクション1
+  - 具体的なアクション2
+- **中期施策**:
+  - 中期的な取り組み1
+  - 中期的な取り組み2
+- **期待効果**: 期待される成果
+
+## プロセス改善
+
+### 2. 改善施策名
+**目標**: 達成したい目標
+- **具体的施策**:
+  - 実施すべき項目1
+  - 実施すべき項目2
+- **ツール活用**:
+  - 活用するツールや仕組み
+- **期待効果**: 期待される成果
+
+## 継続的改善
+
+### 3. 長期戦略名
+**目標**: 長期的な目標
+- **教育・研修**:
+  - 実施する教育施策
+- **組織改善**:
+  - 組織レベルでの改善
+- **期待効果**: 期待される成果
+
+会議内容：
+{text}"""
 
         if instruction.strip():
-            user_prompt += f"\\n\\n追加の指示: {instruction}"
+            user_prompt += f"\n\n追加の指示: {instruction}"
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -1590,7 +1678,7 @@ def definition_solution_with_instruction(text: str, instruction: str = "") -> st
                 {"role": "system", "content": base_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=500
+            max_tokens=1500
         )
         return remove_markdown_blocks(response.choices[0].message.content)
     except Exception as e:
