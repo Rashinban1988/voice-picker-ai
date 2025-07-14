@@ -54,6 +54,11 @@ class Organization(models.Model):
 
     def get_max_duration(self):
         """組織の最大利用可能時間（分）を取得"""
+        # テストモードの場合は無制限
+        import os
+        if os.getenv('TESTING_MODE') == 'true' and os.getenv('TEST_UNLIMITED_UPLOAD') == 'true':
+            return 999999  # 無制限
+
         subscription = self.get_subscription()
         if subscription and subscription.is_active() and subscription.plan and subscription.is_within_contract_period():
             return subscription.plan.max_duration

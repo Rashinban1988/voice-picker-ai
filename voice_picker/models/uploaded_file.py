@@ -51,6 +51,7 @@ class UploadedFile(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
     exist = models.BooleanField(default=True, verbose_name='存在')
+    hls_playlist_path = models.CharField(max_length=500, null=True, blank=True, verbose_name='HLSプレイリストパス')
 
     def transcriptions(self):
         from .transcription import Transcription
