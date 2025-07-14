@@ -29,6 +29,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from django.views.decorators.csrf import csrf_exempt
 from typing import Union
+import hashlib
+import hmac
+from django.utils.http import urlencode
 from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
 import torch
@@ -228,12 +231,212 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             )
         total_duration = sum(uploaded_file.duration for uploaded_file in uploaded_files)
 
-        max_duration = organization.get_max_duration()
+        # テストモードの場合は制限を無効化
+        if os.getenv('TESTING_MODE') == 'true' and os.getenv('TEST_UNLIMITED_UPLOAD') == 'true':
+            max_duration = 999999  # 無制限（実質的に）
+            api_logger.info("Testing mode: Unlimited upload enabled")
+        else:
+            max_duration = organization.get_max_duration()
 
         return Response({
             "total_duration": total_duration,
             "max_duration": max_duration
         })
+
+    @action(detail=True, methods=['post'])
+    def stream_url(self, request, *args, **kwargs):
+        """
+        ストリーミング用の一時認証URL生成
+        """
+        user = request.user
+        organization = user.organization
+
+        if not organization:
+            return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            instance = self.get_object()
+
+            # ユーザーが所属する組織のファイルかチェック
+            if instance.organization != organization:
+                return Response({"detail": "アクセス権限がありません"}, status=status.HTTP_403_FORBIDDEN)
+
+            # 一時的な署名を生成（30分有効）
+            import time
+            timestamp = int(time.time())
+            expires = timestamp + 1800  # 30分後
+
+            # 署名生成
+            secret_key = os.getenv('SECRET_KEY', 'default-secret-key')
+            message = f"{instance.id}:{expires}"
+            signature = hmac.new(
+                secret_key.encode(),
+                message.encode(),
+                hashlib.sha256
+            ).hexdigest()
+
+            # ストリーミングURL生成
+            base_url = f"/api/upload-files/stream/{instance.id}/"
+            params = urlencode({
+                'expires': expires,
+                'signature': signature
+            })
+            stream_url = f"{base_url}?{params}"
+
+            return Response({
+                "stream_url": stream_url,
+                "expires_at": expires,
+                "content_type": mimetypes.guess_type(instance.file.path)[0] or 'application/octet-stream'
+            })
+
+        except UploadedFile.DoesNotExist:
+            return Response({"detail": "ファイルが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            api_logger.error(f"ストリーミングURL生成中にエラー: {e}")
+            return Response({"detail": "内部エラーが発生しました"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['get'])
+    def hls_info(self, request, *args, **kwargs):
+        """
+        HLS配信情報を取得
+        """
+        try:
+            uploaded_file = self.get_object()
+
+            # ユーザーの組織を確認
+            if uploaded_file.organization != request.user.organization:
+                return Response({"detail": "アクセス権限がありません"}, status=status.HTTP_403_FORBIDDEN)
+
+            # HLSプレイリストが存在するか確認
+            if not uploaded_file.hls_playlist_path:
+                return Response({
+                    "hls_available": False,
+                    "message": "HLS形式はまだ準備されていません"
+                })
+
+            # 署名付きURL生成（HLS用）
+            import time
+            timestamp = int(time.time())
+            expires = timestamp + 3600  # 1時間有効
+
+            # 署名生成
+            secret_key = os.getenv('SECRET_KEY', 'default-secret-key')
+            message = f"hls:{uploaded_file.id}:{expires}"
+            signature = hmac.new(
+                secret_key.encode(),
+                message.encode(),
+                hashlib.sha256
+            ).hexdigest()
+
+            # HLSマスタープレイリストURL
+            hls_url = f"/api/hls-stream/{uploaded_file.id}/master.m3u8?expires={expires}&signature={signature}"
+
+            return Response({
+                "hls_available": True,
+                "hls_url": hls_url,
+                "expires_at": expires,
+                "content_type": "application/x-mpegURL"
+            })
+
+        except UploadedFile.DoesNotExist:
+            return Response({"detail": "ファイルが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'])
+    def stream(self, request, *args, **kwargs):
+        """
+        署名付きストリーミングエンドポイント（認証不要）
+        """
+        # 署名検証
+        expires = request.GET.get('expires')
+        signature = request.GET.get('signature')
+        file_id = kwargs.get('pk')
+
+        if not all([expires, signature, file_id]):
+            return HttpResponse("Invalid parameters", status=401)
+
+        # 有効期限チェック
+        import time
+        if int(expires) < int(time.time()):
+            return HttpResponse("URL expired", status=401)
+
+        # 署名検証
+        secret_key = os.getenv('SECRET_KEY', 'default-secret-key')
+        message = f"{file_id}:{expires}"
+        expected_signature = hmac.new(
+            secret_key.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature, expected_signature):
+            return HttpResponse("Invalid signature", status=401)
+
+        # ファイル取得と配信
+        try:
+            instance = UploadedFile.objects.get(id=file_id)
+            file_path = instance.file.path
+
+            if not os.path.exists(file_path):
+                return HttpResponse("File not found", status=404)
+
+            # Range Request対応
+            return self._serve_file_with_range(request, file_path, instance.file.name)
+
+        except UploadedFile.DoesNotExist:
+            return HttpResponse("File not found", status=404)
+        except Exception as e:
+            api_logger.error(f"ストリーミング中にエラー: {e}")
+            return HttpResponse("Internal error", status=500)
+
+    def _serve_file_with_range(self, request, file_path, filename):
+        """
+        Range Request対応のファイル配信
+        """
+        file_size = os.path.getsize(file_path)
+        content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+
+        range_header = request.META.get('HTTP_RANGE')
+        if range_header:
+            range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if range_match:
+                start = int(range_match.group(1))
+                end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+
+                if start >= file_size:
+                    return HttpResponse(status=416)
+
+                end = min(end, file_size - 1)
+                content_length = end - start + 1
+
+                with open(file_path, 'rb') as f:
+                    f.seek(start)
+                    data = f.read(content_length)
+
+                response = HttpResponse(
+                    data,
+                    status=206,
+                    content_type=content_type
+                )
+                response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                response['Content-Length'] = str(content_length)
+                response['Accept-Ranges'] = 'bytes'
+                response['Content-Disposition'] = f'inline; filename="{filename}"'
+                response['Cache-Control'] = 'no-cache'
+
+                return response
+
+        # 通常のレスポンス
+        response = FileResponse(
+            open(file_path, 'rb'),
+            content_type=content_type,
+            as_attachment=False
+        )
+        response['Content-Length'] = file_size
+        response['Accept-Ranges'] = 'bytes'
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        response['Cache-Control'] = 'no-cache'
+
+        return response
 
     @action(detail=False, methods=['get'])
     def audio(self, request, *args, **kwargs):
@@ -380,8 +583,12 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
 
 
             # 文字起こし処理を非同期で実行
-            from .tasks import transcribe_and_save_async
+            from .tasks import transcribe_and_save_async, generate_hls_async
             transcribe_and_save_async.delay(uploaded_file.file.path, uploaded_file.id)
+
+            # 動画ファイルの場合、HLS変換も非同期で実行
+            if uploaded_file.file.name.endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
+                generate_hls_async.delay(str(uploaded_file.id))
 
             return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
         else:
@@ -1602,6 +1809,7 @@ def improve_audio_index(file_path: str) -> bool:
                 'ffmpeg', '-i', file_path,
                 '-c', 'copy',
                 '-write_xing', '1',
+                '-f', 'mp3',
                 '-y', temp_path
             ]
         elif file_extension in ['.m4a', '.mp4']:
@@ -1609,12 +1817,21 @@ def improve_audio_index(file_path: str) -> bool:
                 'ffmpeg', '-i', file_path,
                 '-c', 'copy',
                 '-movflags', 'faststart',
+                '-f', 'mp4' if file_extension == '.mp4' else 'ipod',
                 '-y', temp_path
             ]
-        elif file_extension in ['.wav', '.ogg']:
+        elif file_extension in ['.wav']:
             cmd = [
                 'ffmpeg', '-i', file_path,
                 '-c', 'copy',
+                '-f', 'wav',
+                '-y', temp_path
+            ]
+        elif file_extension in ['.ogg']:
+            cmd = [
+                'ffmpeg', '-i', file_path,
+                '-c', 'copy',
+                '-f', 'ogg',
                 '-y', temp_path
             ]
         elif file_extension in ['.avi', '.mov', '.wmv']:
@@ -1622,6 +1839,7 @@ def improve_audio_index(file_path: str) -> bool:
                 'ffmpeg', '-i', file_path,
                 '-c', 'copy',
                 '-movflags', 'faststart',
+                '-f', 'mp4' if file_extension == '.avi' else 'mov',
                 '-y', temp_path
             ]
         else:

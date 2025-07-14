@@ -57,6 +57,8 @@ if DEBUG:
     CORS_ALLOWED_ORIGINS += [
         "http://localhost:3000",    # 開発時
         "http://127.0.0.1:3000",    # 開発時
+        "http://localhost:3001",    # 開発時（ポート変更）
+        "http://127.0.0.1:3001",    # 開発時（ポート変更）
     ]
     # 開発時の全許可設定
     CORS_ALLOW_ALL_ORIGINS = True
