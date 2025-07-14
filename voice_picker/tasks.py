@@ -8,6 +8,8 @@ from celery import shared_task
 from django.conf import settings
 from .models import UploadedFile, Transcription
 from .views import transcribe_and_save
+import concurrent.futures
+import multiprocessing
 
 processing_logger = logging.getLogger('processing')
 
@@ -109,6 +111,11 @@ def generate_hls_async(self, uploaded_file_id):
         output_dir = os.path.join(hls_base_dir, str(uploaded_file_id))
         os.makedirs(output_dir, exist_ok=True)
 
+        # HLSパスを先に保存（フロントエンドの即座取得のため）
+        uploaded_file.hls_playlist_path = f"hls/{uploaded_file_id}/master.m3u8"
+        uploaded_file.save()
+        processing_logger.info(f"HLS path saved before generation: {uploaded_file.hls_playlist_path}")
+
         # ffmpegコマンド（メモリ効率重視）
         playlist_path = os.path.join(output_dir, 'playlist.m3u8')
 
@@ -138,33 +145,80 @@ def generate_hls_async(self, uploaded_file_id):
         master_playlist_path = os.path.join(output_dir, 'master.m3u8')
         master_content = "#EXTM3U\n#EXT-X-VERSION:3\n"
 
-        for variant in variants:
+        # ハードウェアアクセラレーション検出
+        def detect_hardware_acceleration():
+            """利用可能なハードウェアアクセラレーションを検出"""
+            try:
+                # NVIDIA GPU (NVENC)
+                result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'],
+                                      capture_output=True, text=True)
+                if 'h264_nvenc' in result.stdout:
+                    return 'nvenc'
+
+                # Intel Quick Sync (QSV)
+                if 'h264_qsv' in result.stdout:
+                    return 'qsv'
+
+                # AMD VCE
+                if 'h264_amf' in result.stdout:
+                    return 'amf'
+
+                # Apple VideoToolbox (macOS)
+                if 'h264_videotoolbox' in result.stdout:
+                    return 'videotoolbox'
+
+            except Exception as e:
+                processing_logger.warning(f"Hardware acceleration detection failed: {e}")
+
+            return None
+
+        # 並列処理用の関数
+        def process_variant(variant):
             variant_dir = os.path.join(output_dir, variant['name'])
             os.makedirs(variant_dir, exist_ok=True)
 
             variant_playlist = os.path.join(variant_dir, 'playlist.m3u8')
 
-            # ffmpegコマンド構築（低メモリ使用）
-            cmd = [
-                'ffmpeg',
-                '-i', file_path,
-                '-preset', 'ultrafast',  # 高速・低CPU使用
-                '-threads', '2',  # CPU使用を制限
-                '-c:v', 'h264',
+            # ハードウェアアクセラレーション設定
+            hw_accel = detect_hardware_acceleration()
+            processing_logger.info(f"Detected hardware acceleration: {hw_accel}")
+
+            # ffmpegコマンド構築（最適化版）
+            cmd = ['ffmpeg', '-i', file_path]
+
+            # ハードウェアアクセラレーション適用
+            if hw_accel == 'nvenc':
+                cmd.extend(['-c:v', 'h264_nvenc', '-preset', 'p4'])  # NVENC preset
+            elif hw_accel == 'qsv':
+                cmd.extend(['-c:v', 'h264_qsv', '-preset', 'fast'])
+            elif hw_accel == 'amf':
+                cmd.extend(['-c:v', 'h264_amf', '-quality', 'speed'])
+            elif hw_accel == 'videotoolbox':
+                cmd.extend(['-c:v', 'h264_videotoolbox', '-allow_sw', '1'])
+            else:
+                # ソフトウェアエンコーディング（デフォルト）
+                cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast'])
+
+            # 共通設定
+            cmd.extend([
                 '-b:v', variant['video_bitrate'],
                 '-maxrate', variant['maxrate'],
                 '-bufsize', variant['bufsize'],
                 '-vf', f"scale={variant['resolution']}",
+                '-g', '60',  # GOP size (2秒間隔でキーフレーム at 30fps)
+                '-sc_threshold', '0',  # シーンチェンジ検出無効化
+                '-tune', 'zerolatency',  # 低遅延チューニング
                 '-c:a', 'aac',
                 '-b:a', variant['audio_bitrate'],
                 '-ac', '2',
                 '-f', 'hls',
-                '-hls_time', '10',  # 10秒セグメント
-                '-hls_playlist_type', 'vod',  # VOD用
+                '-hls_time', '6',  # 6秒セグメント（高速化）
+                '-hls_playlist_type', 'vod',
                 '-hls_segment_filename', os.path.join(variant_dir, 'segment_%03d.ts'),
-                '-hls_flags', 'delete_segments',  # 一時ファイル削除
+                '-hls_flags', 'delete_segments',
+                '-y',
                 variant_playlist
-            ]
+            ])
 
             # 実行
             processing_logger.info(f"Executing ffmpeg for {variant['name']}: {' '.join(cmd)}")
@@ -172,26 +226,59 @@ def generate_hls_async(self, uploaded_file_id):
 
             if result.returncode != 0:
                 processing_logger.error(f"ffmpeg error for {variant['name']}: {result.stderr}")
-                # 低画質の変換に失敗した場合のみリトライ
-                if variant['name'] == '360p':
-                    raise Exception(f"ffmpeg failed: {result.stderr}")
-                else:
-                    # 高画質変換失敗は警告のみ
-                    processing_logger.warning(f"Skipping {variant['name']} variant due to error")
-                    continue
+                return None, f"ffmpeg failed for {variant['name']}: {result.stderr}"
 
-            # マスタープレイリストに追加
+            # 成功時の戻り値
             bandwidth = int(variant['video_bitrate'].rstrip('k')) * 1000 + int(variant['audio_bitrate'].rstrip('k')) * 1000
-            master_content += f"#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={variant['resolution']}\n"
-            master_content += f"{variant['name']}/playlist.m3u8\n"
+            return {
+                'name': variant['name'],
+                'bandwidth': bandwidth,
+                'resolution': variant['resolution']
+            }, None
+
+        # 並列実行（最大2並列：360pと720pを同時実行）
+        processing_logger.info("Starting parallel HLS generation")
+        successful_variants = []
+
+        # CPU コア数に応じたワーカー数調整（最小2、最大4）
+        max_workers = min(2, max(1, multiprocessing.cpu_count() // 2))
+        processing_logger.info(f"Using {max_workers} workers for parallel processing")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_variant = {executor.submit(process_variant, variant): variant for variant in variants}
+
+            for future in concurrent.futures.as_completed(future_to_variant):
+                variant = future_to_variant[future]
+                try:
+                    result, error = future.result(timeout=1800)  # 30分タイムアウト
+                    if result:
+                        successful_variants.append(result)
+                        processing_logger.info(f"Successfully processed variant: {result['name']}")
+                    else:
+                        processing_logger.error(f"Failed to process variant {variant['name']}: {error}")
+                        # 360p失敗は致命的エラー
+                        if variant['name'] == '360p':
+                            raise Exception(error)
+                except concurrent.futures.TimeoutError:
+                    processing_logger.error(f"Variant {variant['name']} timed out after 30 minutes")
+                    if variant['name'] == '360p':
+                        raise Exception(f"Critical timeout in 360p variant")
+                except Exception as exc:
+                    processing_logger.error(f"Variant {variant['name']} generated an exception: {exc}")
+                    if variant['name'] == '360p':
+                        raise Exception(f"Critical failure in 360p variant: {exc}")
+
+        # 成功したバリアントでマスタープレイリスト作成
+        if not successful_variants:
+            raise Exception("No variants were successfully processed")
+
+        for variant_info in successful_variants:
+            master_content += f"#EXT-X-STREAM-INF:BANDWIDTH={variant_info['bandwidth']},RESOLUTION={variant_info['resolution']}\n"
+            master_content += f"{variant_info['name']}/playlist.m3u8\n"
 
         # マスタープレイリスト保存
         with open(master_playlist_path, 'w') as f:
             f.write(master_content)
-
-        # UploadedFileにHLS情報を保存
-        uploaded_file.hls_playlist_path = f"hls/{uploaded_file_id}/master.m3u8"
-        uploaded_file.save()
 
         processing_logger.info(f"HLS generation completed for uploaded_file_id: {uploaded_file_id}")
         return {
@@ -202,4 +289,15 @@ def generate_hls_async(self, uploaded_file_id):
 
     except Exception as e:
         processing_logger.error(f"Error in HLS generation: {e}")
+
+        # メモリ不足やタイムアウトの場合は再試行しない
+        if 'memory' in str(e).lower() or 'timeout' in str(e).lower():
+            try:
+                uploaded_file.status = UploadedFile.Status.ERROR
+                uploaded_file.save()
+            except:
+                pass
+            processing_logger.error(f"Non-retryable error in HLS generation: {e}")
+            return {"success": False, "error": str(e)}
+
         raise self.retry(exc=e, countdown=300)  # 5分後にリトライ
