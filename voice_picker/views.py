@@ -334,6 +334,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return Response({
                 "hls_available": True,
                 "hls_url": hls_url,
+                "master_playlist_url": hls_url,
                 "expires_at": expires,
                 "content_type": "application/x-mpegURL"
             })
