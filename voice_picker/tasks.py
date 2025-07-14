@@ -82,7 +82,20 @@ def generate_hls_async(self, uploaded_file_id):
 
         # UploadedFile取得
         uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
-        file_path = uploaded_file.file.path
+
+        # デバッグ情報
+        processing_logger.info(f"File name: {uploaded_file.file.name}")
+        processing_logger.info(f"File path: {uploaded_file.file.path}")
+        processing_logger.info(f"Organization ID: {uploaded_file.organization.id}")
+
+        # 正しいファイルパスを構築
+        file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
+        processing_logger.info(f"Constructed file path: {file_path}")
+
+        # ファイルの存在確認
+        if not os.path.exists(file_path):
+            processing_logger.error(f"File does not exist at path: {file_path}")
+            raise Exception(f"File not found: {file_path}")
 
         # 動画ファイルチェック
         if not file_path.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm')):
