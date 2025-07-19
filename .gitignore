@@ -27,3 +27,16 @@ media/*
 
 # 仮想環境
 venv/*
+
+# Zoom SDK files (too large for GitHub)
+zoom_bot_server/zoom_meeting_sdk/*.so
+zoom_bot_server/zoom_meeting_sdk/*.tar.xz
+zoom_bot_server/zoom_meeting_sdk/*.tar.gz
+zoom_bot_server/zoom_meeting_sdk/libmeetingsdk.so
+zoom_bot_server/zoom_meeting_sdk/zoom-meeting-sdk-*.tar.xz
+
+# Docker node_modules
+zoom_bot_server/node_modules/
+
+# Build outputs
+zoom_bot_server/zoom_meeting_sdk/bot_implementation/build/

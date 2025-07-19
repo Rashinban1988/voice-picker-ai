@@ -46,6 +46,27 @@ services:
       - redis
       - django
 
+  zoom_bot_server:
+    build: ./zoom_bot_server
+    platform: linux/amd64
+    env_file:
+      - ./zoom_bot_server/.env
+    environment:
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./zoom_bot_server:/app
+      - ./media/zoom_recordings:/app/media/zoom_recordings
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /run/user/1000/pulse:/run/user/1000/pulse:rw
+    devices:
+      - /dev/snd
+    privileged: true
+    networks:
+      - webdev
+    working_dir: /app
+
 volumes:
   redis_data:
 

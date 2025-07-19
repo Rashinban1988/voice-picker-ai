@@ -289,6 +289,15 @@ EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 MEDIA_URL = ''
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# Zoom会議録画設定-----------------------------------------------------------------------
+ZOOM_CLIENT_ID = config('ZOOM_CLIENT_ID', default='')
+ZOOM_CLIENT_SECRET = config('ZOOM_CLIENT_SECRET', default='')
+ZOOM_MEETING_SDK_KEY = config('ZOOM_MEETING_SDK_KEY', default='')
+ZOOM_MEETING_SDK_SECRET = config('ZOOM_MEETING_SDK_SECRET', default='')
+ZOOM_REDIRECT_URI = config('ZOOM_REDIRECT_URI', default='http://localhost:4000/auth/callback')
+ZOOM_BOT_SERVER_URL = config('ZOOM_BOT_SERVER_URL', default='http://zoom_bot_server:4000')
+ZOOM_RECORDINGS_PATH = config('ZOOM_RECORDINGS_PATH', default=os.path.join(MEDIA_ROOT, 'zoom_recordings'))
+
 # ログ設定------------------------------------------------------------------------------------------------
 # プロジェクトのベースディレクトリを設定
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

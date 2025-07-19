@@ -52,6 +52,21 @@ class UploadedFile(models.Model):
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
     exist = models.BooleanField(default=True, verbose_name='存在')
     hls_playlist_path = models.CharField(max_length=500, null=True, blank=True, verbose_name='HLSプレイリストパス')
+    
+    # Zoom会議録画用フィールド
+    source_type = models.CharField(max_length=20, default='upload', verbose_name='ソース種別')  # 'upload', 'zoom_meeting', 'scheduled_recording'
+    meeting_url = models.URLField(null=True, blank=True, verbose_name='会議URL')
+    meeting_number = models.CharField(max_length=20, null=True, blank=True, verbose_name='会議番号')
+    meeting_topic = models.CharField(max_length=255, null=True, blank=True, verbose_name='会議タイトル')
+    zoom_session_id = models.CharField(max_length=100, null=True, blank=True, verbose_name='ZoomセッションID')
+    recording_start_time = models.DateTimeField(null=True, blank=True, verbose_name='録画開始時刻')
+    recording_end_time = models.DateTimeField(null=True, blank=True, verbose_name='録画終了時刻')
+    bot_process_id = models.IntegerField(null=True, blank=True, verbose_name='ボットプロセスID')
+    
+    # 予約録画用フィールド
+    scheduled_start_time = models.DateTimeField(null=True, blank=True, verbose_name='予約開始時刻')
+    is_scheduled = models.BooleanField(default=False, verbose_name='予約録画フラグ')
+    meeting_details = models.JSONField(default=dict, blank=True, verbose_name='会議詳細情報')
 
     def transcriptions(self):
         from .transcription import Transcription
