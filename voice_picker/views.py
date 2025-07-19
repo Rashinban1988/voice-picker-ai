@@ -37,7 +37,6 @@ from vosk import KaldiRecognizer, Model
 import torch
 import whisper
 from .models import Transcription, UploadedFile, Environment, ScheduledRecording
-from .models.uploaded_file import Status
 from .serializers import TranscriptionSerializer, UploadedFileSerializer, EnvironmentSerializer
 from .services.zoom_bot_service import ZoomBotService
 from .services.zoom_api_service import ZoomAPIService
@@ -465,12 +464,12 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             return Response({"detail": "UploadedFileが見つかりません"}, status=status.HTTP_404_NOT_FOUND)
 
         instance = queryset.first()
-        
+
         # ファイルが関連付けられていない場合（録画中など）
         if not instance.file:
             api_logger.info(f"ファイルがまだ関連付けられていません: {instance.id}")
             return Response({"detail": "ファイルがまだ利用できません。録画完了後に再度お試しください。"}, status=status.HTTP_404_NOT_FOUND)
-        
+
         file_path = instance.file.path
 
         if not os.path.exists(file_path):
@@ -593,12 +592,18 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-            # 文字起こし処理を非同期で実行
+            # 非同期処理を並列で実行
             from .tasks import transcribe_and_save_async, generate_hls_async
-            transcribe_and_save_async.delay(uploaded_file.file.path, uploaded_file.id)
+            import os
+
+            # 正しいファイルパスを構築
+            file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
+
+            # 文字起こし処理を非同期で実行（全ファイル対象）
+            transcribe_and_save_async.delay(file_path, str(uploaded_file.id))
 
             # 動画ファイルの場合、HLS変換も非同期で実行
-            if uploaded_file.file.name.endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
+            if uploaded_file.file.name.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
                 generate_hls_async.delay(str(uploaded_file.id))
 
             return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
@@ -669,7 +674,7 @@ class TranscriptionSaveViewSet(viewsets.ViewSet):
 
             # 処理ステータスの更新
             UploadedFile.objects.filter(id=uploaded_file_id).update(
-                status = Status.COMPLETED
+                status = UploadedFile.Status.COMPLETED
             )
 
             return Response(
@@ -1834,21 +1839,21 @@ def validate_zoom_meeting_url(request):
     """Zoom会議URLの妥当性を検証"""
     try:
         processing_logger.info(f"Validate URL request data: {request.data}")
-        
+
         # フロントエンドから送信される可能性のある両方のフィールド名を確認
         meeting_url = request.data.get('meeting_url') or request.data.get('meetingUrl')
         processing_logger.info(f"Extracted meeting_url: {meeting_url}")
-        
+
         if not meeting_url:
             return Response({
                 'error': 'meeting_urlが必要です'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         zoom_service = ZoomBotService()
         result = zoom_service.validate_meeting_url(meeting_url)
-        
+
         return Response(result, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"URL validation error: {e}")
         return Response({
@@ -1863,24 +1868,24 @@ def start_zoom_recording(request):
     try:
         meeting_url = request.data.get('meeting_url') or request.data.get('meetingUrl')
         user_name = request.data.get('user_name')
-        
+
         if not meeting_url:
             return Response({
                 'error': 'meeting_urlが必要です'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         user = request.user
         organization_id = user.organization.id
-        
+
         zoom_service = ZoomBotService()
         result = zoom_service.start_meeting_recording(
-            meeting_url, 
+            meeting_url,
             organization_id,
             user_name
         )
-        
+
         return Response(result, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Recording start error: {e}")
         return Response({
@@ -1894,15 +1899,15 @@ def stop_zoom_recording(request):
     """Zoom会議録画停止"""
     try:
         uploaded_file_id = request.data.get('uploaded_file_id')
-        
+
         if not uploaded_file_id:
             return Response({
                 'error': 'uploaded_file_idが必要です'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         user = request.user
         organization = user.organization
-        
+
         # 権限チェック
         try:
             uploaded_file = UploadedFile.objects.get(
@@ -1913,12 +1918,12 @@ def stop_zoom_recording(request):
             return Response({
                 'error': 'ファイルが見つかりません'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         zoom_service = ZoomBotService()
         result = zoom_service.stop_meeting_recording(uploaded_file_id)
-        
+
         return Response(result, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Recording stop error: {e}")
         return Response({
@@ -1932,7 +1937,7 @@ def get_zoom_recording_status(request, uploaded_file_id):
     try:
         user = request.user
         organization = user.organization
-        
+
         # 権限チェック
         try:
             uploaded_file = UploadedFile.objects.get(
@@ -1943,12 +1948,12 @@ def get_zoom_recording_status(request, uploaded_file_id):
             return Response({
                 'error': 'ファイルが見つかりません'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         zoom_service = ZoomBotService()
         result = zoom_service.get_recording_status(uploaded_file_id)
-        
+
         return Response(result, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Status check error: {e}")
         return Response({
@@ -1963,13 +1968,13 @@ def get_active_zoom_recordings(request):
     try:
         zoom_service = ZoomBotService()
         recordings = zoom_service.get_all_active_recordings()
-        
+
         return Response({
             'success': True,
             'recordings': recordings,
             'count': len(recordings)
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Active recordings check error: {e}")
         return Response({
@@ -1987,15 +1992,15 @@ def get_meeting_details(request):
             return Response({
                 'error': 'meetingUrl is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         zoom_api = ZoomAPIService()
         meeting_details = zoom_api.parse_meeting_url_advanced(meeting_url)
-        
+
         return Response({
             'success': True,
             'meeting_details': meeting_details
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Meeting details fetch error: {e}")
         return Response({
@@ -2008,12 +2013,12 @@ def schedule_zoom_recording(request):
     try:
         meeting_url = request.data.get('meetingUrl')
         scheduled_start_time = request.data.get('scheduledStartTime')
-        
+
         if not meeting_url or not scheduled_start_time:
             return Response({
                 'error': 'meetingUrl and scheduledStartTime are required'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 日時をパース
         from datetime import datetime
         try:
@@ -2022,14 +2027,14 @@ def schedule_zoom_recording(request):
             return Response({
                 'error': 'Invalid scheduledStartTime format'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 過去の時刻チェック
         from django.utils import timezone
         if scheduled_time <= timezone.now():
             return Response({
                 'error': 'Scheduled time must be in the future'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # ユーザーオプション
         user_options = {
             'pre_recording_minutes': request.data.get('preRecordingMinutes', 5),
@@ -2037,7 +2042,7 @@ def schedule_zoom_recording(request):
             'auto_start': request.data.get('autoStart', True),
             'auto_stop': request.data.get('autoStop', True)
         }
-        
+
         # 予約録画作成
         result = create_scheduled_recording.delay(
             meeting_url=meeting_url,
@@ -2045,7 +2050,7 @@ def schedule_zoom_recording(request):
             scheduled_start_time=scheduled_time,
             user_options=user_options
         ).get()
-        
+
         if result['success']:
             return Response({
                 'success': True,
@@ -2057,7 +2062,7 @@ def schedule_zoom_recording(request):
             return Response({
                 'error': result['error']
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
     except Exception as e:
         processing_logger.error(f"Schedule recording error: {e}")
         return Response({
@@ -2071,12 +2076,12 @@ def get_scheduled_recordings(request):
     try:
         user = request.user
         organization = user.organization
-        
+
         # 組織のすべての予約録画を取得
         scheduled_recordings = ScheduledRecording.objects.filter(
             uploaded_file__organization=organization
         ).select_related('uploaded_file').order_by('-created_at')
-        
+
         recordings_data = []
         for recording in scheduled_recordings:
             recordings_data.append({
@@ -2098,13 +2103,13 @@ def get_scheduled_recordings(request):
                 'time_until_start': recording.get_time_until_start(),
                 'formatted_schedule': recording.get_formatted_schedule()
             })
-        
+
         return Response({
             'success': True,
             'recordings': recordings_data,
             'count': len(recordings_data)
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Get scheduled recordings error: {e}")
         return Response({
@@ -2122,14 +2127,14 @@ def recording_completed(request):
     """Zoom録画完了通知を受け取る"""
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     # トークン検証（シンプルな共有トークン方式）
     auth_header = request.headers.get('Authorization', '')
     expected_token = f'Bearer {os.environ.get("DJANGO_API_TOKEN", "zoom-bot-secret-token")}'
     if auth_header != expected_token:
         processing_logger.warning(f"Invalid authorization token: {auth_header}, expected: {expected_token}")
         return JsonResponse({'error': 'Invalid authorization'}, status=401)
-    
+
     try:
         data = json.loads(request.body)
         session_id = data.get('sessionId')
@@ -2137,32 +2142,32 @@ def recording_completed(request):
         audio_file_path = data.get('audioFile')
         meeting_number = data.get('meetingNumber')
         duration = data.get('duration', 0)
-        
+
         # UploadedFileを取得
         uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
-        
+
         # 既に処理済みの場合はスキップ（冪等性の確保）
-        if uploaded_file.file and uploaded_file.status == Status.COMPLETED:
+        if uploaded_file.file and uploaded_file.status == UploadedFile.Status.COMPLETED:
             processing_logger.info(f"Recording {uploaded_file_id} already processed, skipping")
             return JsonResponse({
                 'success': True,
                 'message': 'Recording already processed',
                 'already_processed': True
             })
-        
+
         # 音声ファイルをコピー
         container_path = audio_file_path
         host_path = os.path.join(settings.MEDIA_ROOT, 'zoom_recordings', f'{session_id}_audio.wav')
-        
+
         # ディレクトリを作成
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
-        
+
         # ボリュームマッピングを使用して直接アクセス
         # container_pathをホストパスに変換
         container_file_name = os.path.basename(container_path)
         container_dir_name = os.path.basename(os.path.dirname(container_path))
         source_path = os.path.join(settings.MEDIA_ROOT, 'zoom_recordings', container_dir_name, container_file_name)
-        
+
         # ファイルをコピー
         import shutil
         if os.path.exists(source_path):
@@ -2170,28 +2175,33 @@ def recording_completed(request):
             processing_logger.info(f"Audio file copied from {source_path} to {host_path}")
         else:
             processing_logger.warning(f"Source audio file not found: {source_path}")
-        
+
         # UploadedFileを更新
         uploaded_file.file = f'zoom_recordings/{session_id}_audio.wav'
         uploaded_file.duration = duration
         uploaded_file.is_processing = False
-        uploaded_file.status = Status.COMPLETED
+        uploaded_file.status = UploadedFile.Status.COMPLETED
         uploaded_file.save()
-        
+
         # 文字起こしタスクを開始
         from .tasks.tasks import transcribe_and_save_async, generate_hls_async
+        import os
+
+        # 正しいファイルパスを構築
+        file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
+
         processing_logger.info(f"Starting transcription for: {uploaded_file.id}")
-        transcribe_and_save_async.delay(uploaded_file.file.path, str(uploaded_file.id))
-        
+        transcribe_and_save_async.delay(file_path, str(uploaded_file.id))
+
         # HLS変換タスクを開始
         processing_logger.info(f"Starting HLS generation for: {uploaded_file.id}")
         generate_hls_async.delay(str(uploaded_file.id))
-        
+
         return JsonResponse({
             'success': True,
             'message': 'Recording completed and processing started'
         })
-        
+
     except UploadedFile.DoesNotExist:
         return JsonResponse({'error': 'UploadedFile not found'}, status=404)
     except Exception as e:
@@ -2203,47 +2213,47 @@ def create_uploaded_file_record(request):
     """Node.js側からUploadedFileレコードを作成"""
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     # トークン検証
     auth_header = request.headers.get('Authorization', '')
     expected_token = f'Bearer {os.environ.get("DJANGO_API_TOKEN", "zoom-bot-secret-token")}'
     if auth_header != expected_token:
         return JsonResponse({'error': 'Invalid authorization'}, status=401)
-    
+
     try:
         data = json.loads(request.body)
         meeting_url = data.get('meetingUrl')
         meeting_number = data.get('meetingNumber')
         session_id = data.get('sessionId')
-        
+
         if not meeting_url or not meeting_number or not session_id:
             return JsonResponse({'error': 'Missing required fields'}, status=400)
-        
+
         # デフォルトのorganization_idを使用（実際のプロジェクトでは適切に設定する必要があります）
         from django.contrib.auth import get_user_model
         User = get_user_model()
         default_user = User.objects.first()
         if not default_user:
             return JsonResponse({'error': 'No users found'}, status=500)
-        
+
         # UploadedFileレコードを作成
         uploaded_file = UploadedFile.objects.create(
             organization_id=default_user.organization.id,
             file='',  # 後で更新
-            status=Status.PROCESSING,
+            status=UploadedFile.Status.PROCESSING,
             source_type='zoom_meeting',
             meeting_url=meeting_url,
             meeting_number=meeting_number,
             zoom_session_id=session_id,
             recording_start_time=timezone.now()
         )
-        
+
         return JsonResponse({
             'id': str(uploaded_file.id),
             'success': True,
             'message': 'UploadedFile record created successfully'
         })
-        
+
     except Exception as e:
         processing_logger.error(f"UploadedFile creation error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
@@ -2254,15 +2264,15 @@ def cancel_scheduled_recording(request):
     try:
         recording_id = request.data.get('recordingId')
         cancel_reason = request.data.get('reason', 'ユーザーによるキャンセル')
-        
+
         if not recording_id:
             return Response({
                 'error': 'recordingId is required'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         user = request.user
         organization = user.organization
-        
+
         try:
             recording = ScheduledRecording.objects.get(
                 id=recording_id,
@@ -2272,19 +2282,19 @@ def cancel_scheduled_recording(request):
             return Response({
                 'error': 'Scheduled recording not found'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         if not recording.can_cancel:
             return Response({
                 'error': 'Cannot cancel this recording'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         recording.cancel(cancel_reason)
-        
+
         return Response({
             'success': True,
             'message': 'Recording cancelled successfully'
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Cancel scheduled recording error: {e}")
         return Response({
@@ -2297,7 +2307,7 @@ def get_scheduled_recording_status(request, recording_id):
     try:
         user = request.user
         organization = user.organization
-        
+
         try:
             recording = ScheduledRecording.objects.get(
                 id=recording_id,
@@ -2307,7 +2317,7 @@ def get_scheduled_recording_status(request, recording_id):
             return Response({
                 'error': 'Scheduled recording not found'
             }, status=status.HTTP_404_NOT_FOUND)
-        
+
         return Response({
             'success': True,
             'recording': {
@@ -2323,7 +2333,7 @@ def get_scheduled_recording_status(request, recording_id):
                 'recording_window': recording.recording_window
             }
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         processing_logger.error(f"Get scheduled recording status error: {e}")
         return Response({

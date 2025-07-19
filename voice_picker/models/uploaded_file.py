@@ -28,13 +28,12 @@ def organization_upload_to(instance, filename):
     
     return os.path.join(organization_id, filename)
 
-class Status(models.IntegerChoices):
-    UNPROCESSED = 0, _('未処理')
-    PROCESSING = 1, _('処理中')
-    COMPLETED = 2, _('処理済み')
-    ERROR = 3, _('エラー')
-
 class UploadedFile(models.Model):
+    class Status(models.IntegerChoices):
+        UNPROCESSED = 0, _('未処理')
+        PROCESSING = 1, _('処理中')
+        COMPLETED = 2, _('処理済み')
+        ERROR = 3, _('エラー')
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='uploaded_files', verbose_name='組織')
     file = models.FileField(upload_to=organization_upload_to, verbose_name='ファイル')

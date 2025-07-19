@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from voice_picker.models import UploadedFile, Transcription
-from voice_picker.models.uploaded_file import Status
 from member_management.models import Organization
 
 
@@ -24,7 +23,7 @@ class Command(BaseCommand):
             id=uuid.uuid4(),
             organization=organization,
             file='test_files/meeting_recording.mp3',  # 仮のファイルパス
-            status=Status.COMPLETED,
+            status=UploadedFile.Status.COMPLETED,
             duration=1800.0,  # 30分
             summarization=self.get_sample_summarization(),
             issue=self.get_sample_issues(),

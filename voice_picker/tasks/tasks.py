@@ -10,6 +10,10 @@ from ..models import UploadedFile, Transcription
 from ..services.transcription_service import transcribe_and_save
 import concurrent.futures
 import multiprocessing
+from dotenv import load_dotenv
+
+# 環境変数をロード
+load_dotenv()
 
 processing_logger = logging.getLogger('processing')
 
@@ -37,8 +41,12 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
             processing_logger.error(f"UploadedFile with id {uploaded_file_id} not found")
             return {"success": False, "error": "UploadedFile not found"}
 
+        # 環境変数から文字起こしプロバイダーを取得
+        transcription_provider = os.getenv('TRANSCRIPTION_PROVIDER', 'openai')
+        processing_logger.info(f"Using transcription provider: {transcription_provider}")
+
         # 文字起こし実行
-        success = transcribe_and_save(file_path, uploaded_file_id)
+        success = transcribe_and_save(file_path, uploaded_file_id, transcription_provider)
 
         if success:
             # 成功時はステータスを完了に更新
