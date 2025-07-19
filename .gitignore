@@ -39,4 +39,4 @@ zoom_bot_server/zoom_meeting_sdk/zoom-meeting-sdk-*.tar.xz
 zoom_bot_server/node_modules/
 
 # Build outputs
-zoom_bot_server/zoom_meeting_sdk/bot_implementation/build/
+zoom_bot_server/zoom_meeting_sdk/bot_implementation/build/.env.docker.test
