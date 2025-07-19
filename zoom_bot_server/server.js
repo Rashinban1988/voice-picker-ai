@@ -22,8 +22,7 @@ const jwtGenerator = new ZoomJWTGenerator(
 const meetingService = new MeetingService();
 
 // Environment detection for development vs production
-const isDockerDevelopment = process.env.NODE_ENV === 'development' || !process.env.PRODUCTION;
-const isDevelopmentEnvironment = isDockerDevelopment;
+const isDevelopmentEnvironment = process.env.PRODUCTION !== 'true';
 
 console.log(`🖥️  Platform: ${process.platform}`);
 console.log(`🔧 Environment: ${isDevelopmentEnvironment ? 'Development (macOS host)' : 'Production (Ubuntu)'}`);

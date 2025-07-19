@@ -52,7 +52,7 @@ logout
 ```bash
 # プロジェクトクローン
 cd ~
-git clone YOUR_REPOSITORY_URL
+git clone https://github.com/mest-yamaru/voice-picker-ai.git
 cd voice-picker-ai/macching_app
 
 # 環境変数設定（本番用）
