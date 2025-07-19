@@ -1,0 +1,7 @@
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/zoom_meeting_bot.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/edit_cache.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/rebuild_cache.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/list_install_components.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/install.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/install/local.dir
+/app/zoom_meeting_sdk/bot_implementation/build/CMakeFiles/install/strip.dir

@@ -1,0 +1,54 @@
+cmake_minimum_required(VERSION 3.10)
+project(ZoomSDKBot)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Set build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Compiler flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+# SDK paths
+set(ZOOM_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../")
+set(ZOOM_SDK_INCLUDE_DIR "${ZOOM_SDK_ROOT}/h")
+set(ZOOM_SDK_LIB_DIR "${ZOOM_SDK_ROOT}")
+
+# Include directories
+include_directories(${ZOOM_SDK_INCLUDE_DIR})
+include_directories(${ZOOM_SDK_INCLUDE_DIR}/meeting_service_components)
+include_directories(${ZOOM_SDK_INCLUDE_DIR}/rawdata)
+
+# Find required libraries
+find_package(Threads REQUIRED)
+
+# Source files
+set(SOURCES
+    src/zoom_sdk_integration.cpp
+    src/real_sdk_main.cpp
+)
+
+# Create executable
+add_executable(real_zoom_sdk_bot ${SOURCES})
+
+# Link libraries
+target_link_libraries(real_zoom_sdk_bot
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${ZOOM_SDK_LIB_DIR}/libmeetingsdk.so
+    dl
+    m
+)
+
+# Set runtime library path
+set_target_properties(real_zoom_sdk_bot PROPERTIES
+    INSTALL_RPATH "${ZOOM_SDK_LIB_DIR}:${ZOOM_SDK_LIB_DIR}/qt_libs/Qt/lib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+# Install target
+install(TARGETS real_zoom_sdk_bot DESTINATION bin)

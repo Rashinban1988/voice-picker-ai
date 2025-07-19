@@ -1,0 +1,14 @@
+cmake_minimum_required(VERSION 3.16)
+project(ZoomMeetingBot)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Simple bot executable
+add_executable(zoom_meeting_bot src/simple_bot.cpp)
+
+# Link math library
+target_link_libraries(zoom_meeting_bot m)
+
+# Installation
+install(TARGETS zoom_meeting_bot DESTINATION bin)

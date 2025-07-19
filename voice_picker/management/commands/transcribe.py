@@ -2,7 +2,6 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from voice_picker.models import UploadedFile, Environment
 from voice_picker.views import transcribe_and_save, text_generation_save, transcribe_without_diarization
-from voice_picker.models.uploaded_file import Status
 import logging
 import requests
 import os
@@ -26,7 +25,7 @@ class Command(BaseCommand):
 
         unprocessed_files = UploadedFile.objects.filter(
             transcription__isnull=True,
-            status=Status.UNPROCESSED
+            status=UploadedFile.Status.UNPROCESSED
         )
 
         if not unprocessed_files.exists():
@@ -34,7 +33,7 @@ class Command(BaseCommand):
             return
 
         file_ids = list(unprocessed_files.values_list('id', flat=True))
-        UploadedFile.objects.filter(id__in=file_ids).update(status=Status.IN_PROGRESS)
+        UploadedFile.objects.filter(id__in=file_ids).update(status=UploadedFile.Status.PROCESSING)
         processing_logger.info(f'{len(file_ids)}件のファイルを処理中に設定しました。')
 
         for file_id in file_ids:
@@ -54,7 +53,7 @@ class Command(BaseCommand):
                     with transaction.atomic():
                         transcribe_result = transcribe_without_diarization(file_path, file_id, is_free_user=True)
                         if not transcribe_result:
-                            UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                            UploadedFile.objects.filter(id=file_id).update(status=UploadedFile.Status.UNPROCESSED)
                             processing_logger.error(f"文字起こしに失敗しました。File ID: {file_id}")
                             continue
 
@@ -62,14 +61,14 @@ class Command(BaseCommand):
                         if not isinstance(result, UploadedFile):
                             raise Exception("テキスト生成に失敗しました")
 
-                        UploadedFile.objects.filter(id=file_id).update(status=Status.PROCESSED)
+                        UploadedFile.objects.filter(id=file_id).update(status=UploadedFile.Status.COMPLETED)
                 else:
                     # 有料会員の場合
                     with transaction.atomic():
                         # transcribe_google_colab(file_path, file_id)
                         transcribe_result = transcribe_without_diarization(file_path, file_id)
                         if not transcribe_result:
-                            UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                            UploadedFile.objects.filter(id=file_id).update(status=UploadedFile.Status.UNPROCESSED)
                             processing_logger.error(f"文字起こしに失敗しました。File ID: {file_id}")
                             continue
 
@@ -77,12 +76,12 @@ class Command(BaseCommand):
                         if not isinstance(result, UploadedFile):
                             raise Exception("テキスト生成に失敗しました")
 
-                        UploadedFile.objects.filter(id=file_id).update(status=Status.PROCESSED)
+                        UploadedFile.objects.filter(id=file_id).update(status=UploadedFile.Status.COMPLETED)
 
                 processing_logger.info(f'正常に文字起こしが完了しました。File ID: {file_id}')
 
             except Exception as e:
-                UploadedFile.objects.filter(id=file_id).update(status=Status.UNPROCESSED)
+                UploadedFile.objects.filter(id=file_id).update(status=UploadedFile.Status.UNPROCESSED)
                 processing_logger.exception(f"文字起こしでエラーが発生しました。File ID: {file_id}")
                 processing_logger.error(f'文字起こしでエラーが発生しました: {e}')
 
