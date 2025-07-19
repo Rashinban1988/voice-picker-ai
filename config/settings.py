@@ -297,7 +297,6 @@ ZOOM_MEETING_SDK_SECRET = config('ZOOM_MEETING_SDK_SECRET', default='')
 ZOOM_REDIRECT_URI = config('ZOOM_REDIRECT_URI', default='http://localhost:4000/auth/callback')
 ZOOM_BOT_SERVER_URL = config('ZOOM_BOT_SERVER_URL', default='http://zoom_bot_server:4000')
 ZOOM_RECORDINGS_PATH = config('ZOOM_RECORDINGS_PATH', default=os.path.join(MEDIA_ROOT, 'zoom_recordings'))
-
 # ログ設定------------------------------------------------------------------------------------------------
 # プロジェクトのベースディレクトリを設定
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

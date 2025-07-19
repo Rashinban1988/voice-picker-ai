@@ -591,7 +591,6 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                 django_logger.error(f"ファイル保存中にエラーが発生しました: {e}")
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
             # 非同期処理を並列で実行
             from .tasks import transcribe_and_save_async, generate_hls_async
             import os
@@ -1828,7 +1827,6 @@ def improve_audio_index(file_path: str) -> bool:
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
         return False
-
 
 # Zoom会議録画用API Views
 from rest_framework.decorators import api_view
