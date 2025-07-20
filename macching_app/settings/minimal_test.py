@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'member_management.apps.MemberManagementConfig',
+    'voice_picker.apps.VoicePickerConfig',
 ]
 
 # ユーザーモデル

@@ -17,6 +17,12 @@ load_dotenv()
 
 processing_logger = logging.getLogger('processing')
 
+# Status constants from UploadedFile.Status
+STATUS_UNPROCESSED = 0
+STATUS_PROCESSING = 1
+STATUS_COMPLETED = 2
+STATUS_ERROR = 3
+
 @shared_task(bind=True)
 def transcribe_and_save_async(self, file_path, uploaded_file_id):
     """
@@ -35,7 +41,7 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
         # UploadedFileの状態を処理中に更新
         try:
             uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
-            uploaded_file.status = UploadedFile.Status.PROCESSING
+            uploaded_file.status = STATUS_PROCESSING
             uploaded_file.save()
         except UploadedFile.DoesNotExist:
             processing_logger.error(f"UploadedFile with id {uploaded_file_id} not found")
@@ -50,13 +56,13 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
 
         if success:
             # 成功時はステータスを完了に更新
-            uploaded_file.status = UploadedFile.Status.COMPLETED
+            uploaded_file.status = STATUS_COMPLETED
             uploaded_file.save()
             processing_logger.info(f"Transcription completed successfully for uploaded_file_id: {uploaded_file_id}")
             return {"success": True, "uploaded_file_id": uploaded_file_id}
         else:
             # 失敗時はステータスをエラーに更新
-            uploaded_file.status = UploadedFile.Status.ERROR
+            uploaded_file.status = STATUS_ERROR
             uploaded_file.save()
             processing_logger.error(f"Transcription failed for uploaded_file_id: {uploaded_file_id}")
             return {"success": False, "error": "Transcription failed"}
@@ -67,7 +73,7 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
         # エラー時もステータスを更新
         try:
             uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
-            uploaded_file.status = UploadedFile.Status.ERROR
+            uploaded_file.status = STATUS_ERROR
             uploaded_file.save()
         except UploadedFile.DoesNotExist:
             pass
@@ -205,7 +211,7 @@ def generate_hls_async(self, uploaded_file_id):
                 cmd.extend(['-c:v', 'h264_videotoolbox', '-allow_sw', '1'])
             else:
                 # ソフトウェアエンコーディング（デフォルト）
-                cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast'])
+                cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency'])
 
             # 共通設定
             cmd.extend([
@@ -215,7 +221,6 @@ def generate_hls_async(self, uploaded_file_id):
                 '-vf', f"scale={variant['resolution']}",
                 '-g', '60',  # GOP size (2秒間隔でキーフレーム at 30fps)
                 '-sc_threshold', '0',  # シーンチェンジ検出無効化
-                '-tune', 'zerolatency',  # 低遅延チューニング
                 '-c:a', 'aac',
                 '-b:a', variant['audio_bitrate'],
                 '-ac', '2',
@@ -301,7 +306,7 @@ def generate_hls_async(self, uploaded_file_id):
         # メモリ不足やタイムアウトの場合は再試行しない
         if 'memory' in str(e).lower() or 'timeout' in str(e).lower():
             try:
-                uploaded_file.status = UploadedFile.Status.ERROR
+                uploaded_file.status = STATUS_ERROR
                 uploaded_file.save()
             except:
                 pass

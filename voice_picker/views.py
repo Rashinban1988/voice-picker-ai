@@ -587,25 +587,24 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                         uploaded_file.save()
                         file_serializer = UploadedFileSerializer(uploaded_file)
 
+                # 非同期処理を並列で実行
+                from .tasks import transcribe_and_save_async, generate_hls_async
+
+                # 正しいファイルパスを構築
+                file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
+
+                # 文字起こし処理を非同期で実行（全ファイル対象）
+                transcribe_and_save_async.delay(file_path, str(uploaded_file.id))
+
+                # 動画ファイルの場合、HLS変換も非同期で実行
+                if uploaded_file.file.name.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
+                    generate_hls_async.delay(str(uploaded_file.id))
+
+                return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
+
             except Exception as e:
                 django_logger.error(f"ファイル保存中にエラーが発生しました: {e}")
                 return Response({"error": "ファイルの保存に失敗しました。"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # 非同期処理を並列で実行
-            from .tasks import transcribe_and_save_async, generate_hls_async
-            import os
-
-            # 正しいファイルパスを構築
-            file_path = os.path.join(settings.MEDIA_ROOT, uploaded_file.file.name)
-
-            # 文字起こし処理を非同期で実行（全ファイル対象）
-            transcribe_and_save_async.delay(file_path, str(uploaded_file.id))
-
-            # 動画ファイルの場合、HLS変換も非同期で実行
-            if uploaded_file.file.name.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
-                generate_hls_async.delay(str(uploaded_file.id))
-
-            return Response(file_serializer.data, status=status.HTTP_202_ACCEPTED)
         else:
             django_logger.info(f"ファイルアップロードに失敗しました: {file_serializer.errors}")
             return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)

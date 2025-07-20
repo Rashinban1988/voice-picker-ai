@@ -8,6 +8,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Status constants from UploadedFile.Status
+STATUS_UNPROCESSED = 0
+STATUS_PROCESSING = 1
+STATUS_COMPLETED = 2
+STATUS_ERROR = 3
+
 @shared_task(bind=True, max_retries=3)
 def schedule_recording_task(self, scheduled_recording_id):
     """
@@ -262,7 +268,7 @@ def create_scheduled_recording(meeting_url, organization_id, scheduled_start_tim
         uploaded_file = UploadedFile.objects.create(
             organization_id=organization_id,
             file='',  # 後で更新
-            status=UploadedFile.Status.PROCESSING,
+            status=STATUS_PROCESSING,
             source_type='scheduled_recording',
             meeting_url=meeting_url,
             meeting_number=meeting_details['meeting_id'],
