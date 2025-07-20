@@ -1,31 +1,39 @@
-# Ubuntu 5GBメモリ環境での最適化ガイド
+# Ubuntu 12GBメモリ環境での最適化ガイド
 
 ## システム要件
 - Ubuntu 20.04 LTS以上
-- メモリ: 5GB
-- Swap: 2GB推奨
+- メモリ: 12GB
+- Swap: 4GB推奨
 
 ## 1. Docker設定の最適化
 
 ### docker-compose.yaml の変更
 ```yaml
+django:
+  mem_limit: 3g
+  memswap_limit: 3g
+
 celery:
-  command: celery -A config worker --loglevel=info --concurrency=1
-  # メモリ制限を明示的に設定
-  deploy:
-    resources:
-      limits:
-        memory: 1.5G
-      reservations:
-        memory: 1G
+  command: celery -A config worker --loglevel=info --concurrency=2 --max-memory-per-child=2000000
+  mem_limit: 4g
+  memswap_limit: 4g
+
+redis:
+  command: redis-server --appendonly yes --maxmemory 1g --maxmemory-policy allkeys-lru
+  mem_limit: 1.5g
+  memswap_limit: 1.5g
+
+zoom_bot_server:
+  mem_limit: 2g
+  memswap_limit: 2g
 ```
 
 ## 2. システム設定
 
 ### Swapの設定
 ```bash
-# 2GB Swapファイルを作成
-sudo fallocate -l 2G /swapfile
+# 4GB Swapファイルを作成
+sudo fallocate -l 4G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile

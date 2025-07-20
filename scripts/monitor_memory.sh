@@ -1,7 +1,7 @@
 #!/bin/bash
 # メモリ使用状況を監視し、閾値を超えたらCeleryを再起動
 
-THRESHOLD=85  # メモリ使用率の閾値（%）
+THRESHOLD=90  # メモリ使用率の閾値（%）12GB環境用
 
 while true; do
     # メモリ使用率を取得

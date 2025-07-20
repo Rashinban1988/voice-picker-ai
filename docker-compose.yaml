@@ -21,23 +21,27 @@ services:
       - "${DEBUG_PORT}:${DEBUG_PORT}"
     depends_on:
       - redis
+    mem_limit: 2g
+    memswap_limit: 2g
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 1g --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
       - webdev
     ports:
       - "6380:6379"
+    mem_limit: 1.5g
+    memswap_limit: 1.5g
 
   celery:
     build: .
     image: config
     env_file:
       - .env
-    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=1000000
+    command: celery -A config worker --loglevel=info --concurrency=3 --max-memory-per-child=1500000
     volumes:
       - .:/code
     networks:
@@ -45,8 +49,8 @@ services:
     depends_on:
       - redis
       - django
-    mem_limit: 2g
-    memswap_limit: 2g
+    mem_limit: 6g
+    memswap_limit: 6g
 
   zoom_bot_server:
     build: ./zoom_bot_server
@@ -68,6 +72,8 @@ services:
     networks:
       - webdev
     working_dir: /app
+    mem_limit: 1.5g
+    memswap_limit: 1.5g
 
 volumes:
   redis_data:
