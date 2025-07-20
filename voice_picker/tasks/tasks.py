@@ -59,6 +59,15 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
             uploaded_file.status = STATUS_COMPLETED
             uploaded_file.save()
             processing_logger.info(f"Transcription completed successfully for uploaded_file_id: {uploaded_file_id}")
+
+            # 文字起こし完了後に要約・課題・取り組み案を生成
+            try:
+                processing_logger.info(f"Starting AI analysis for uploaded_file_id: {uploaded_file_id}")
+                generate_ai_analysis_async.delay(uploaded_file_id)
+                processing_logger.info(f"AI analysis task queued for uploaded_file_id: {uploaded_file_id}")
+            except Exception as analysis_error:
+                processing_logger.error(f"Failed to queue AI analysis: {analysis_error}")
+
             return {"success": True, "uploaded_file_id": uploaded_file_id}
         else:
             # 失敗時はステータスをエラーに更新
@@ -77,6 +86,82 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
             uploaded_file.save()
         except UploadedFile.DoesNotExist:
             pass
+
+        # Celeryの自動リトライ機能を使用
+        raise self.retry(exc=e, countdown=60, max_retries=3)
+
+
+@shared_task(bind=True, max_retries=3)
+def generate_ai_analysis_async(self, uploaded_file_id):
+    """
+    文字起こし完了後にAI分析（要約・課題・取り組み案）を生成する非同期タスク
+
+    Args:
+        uploaded_file_id (str): UploadedFileのUUID
+
+    Returns:
+        dict: 実行結果
+    """
+    try:
+        processing_logger.info(f"Starting AI analysis for uploaded_file_id: {uploaded_file_id}")
+
+        # UploadedFile取得
+        uploaded_file = UploadedFile.objects.get(id=uploaded_file_id)
+
+        # 文字起こしデータを取得
+        transcriptions = Transcription.objects.filter(uploaded_file=uploaded_file).order_by('start_time')
+
+        if not transcriptions.exists():
+            processing_logger.error(f"No transcriptions found for uploaded_file_id: {uploaded_file_id}")
+            return {"success": False, "error": "No transcriptions found"}
+
+        # 文字起こしテキストを結合
+        full_text = " ".join([t.text for t in transcriptions])
+        processing_logger.info(f"Combined transcription text length: {len(full_text)} characters")
+
+        # 既存のAI分析関数を使用
+        from ..views import summarize_text, definition_issue, definition_solution
+
+        try:
+            # 要約を生成
+            processing_logger.info("Generating summary...")
+            summary = summarize_text(full_text)
+
+            # 課題を特定
+            processing_logger.info("Identifying issues...")
+            issues = definition_issue(full_text)
+
+            # 取り組み案を生成
+            processing_logger.info("Generating solutions...")
+            solutions = definition_solution(full_text)
+
+            # 結果をデータベースに保存
+            uploaded_file.summarization = summary
+            uploaded_file.issue = issues
+            uploaded_file.solution = solutions
+            uploaded_file.save()
+
+            processing_logger.info(f"AI analysis completed successfully for uploaded_file_id: {uploaded_file_id}")
+            return {
+                "success": True,
+                "uploaded_file_id": uploaded_file_id,
+                "analysis": {
+                    "summary": summary,
+                    "issues": issues,
+                    "solutions": solutions
+                }
+            }
+
+        except Exception as analysis_error:
+            processing_logger.error(f"AI analysis failed: {analysis_error}")
+            return {"success": False, "error": f"AI analysis failed: {analysis_error}"}
+
+    except UploadedFile.DoesNotExist:
+        processing_logger.error(f"UploadedFile with id {uploaded_file_id} not found")
+        return {"success": False, "error": "UploadedFile not found"}
+
+    except Exception as e:
+        processing_logger.error(f"Error in AI analysis task: {e}")
 
         # Celeryの自動リトライ機能を使用
         raise self.retry(exc=e, countdown=60, max_retries=3)
@@ -319,6 +404,15 @@ def generate_hls_async(self, uploaded_file_id):
         with open(master_playlist_path, 'w') as f:
             f.write(master_content)
 
+        # HLSプレイリストパスをデータベースに保存
+        try:
+            uploaded_file.hls_playlist_path = f"hls/{uploaded_file_id}/master.m3u8"
+            uploaded_file.status = STATUS_COMPLETED
+            uploaded_file.save()
+            processing_logger.info(f"HLS playlist path saved: {uploaded_file.hls_playlist_path}")
+        except Exception as save_error:
+            processing_logger.error(f"Failed to save HLS playlist path: {save_error}")
+
         processing_logger.info(f"HLS generation completed for uploaded_file_id: {uploaded_file_id}")
         return {
             "success": True,
@@ -336,7 +430,7 @@ def generate_hls_async(self, uploaded_file_id):
             'cannot load libcuda', 'encoder not found', 'codec not found',
             'hardware acceleration', 'libcuda.so', 'nvidia'
         ]
-        
+
         if any(error in error_str for error in non_retryable_errors):
             try:
                 uploaded_file.status = STATUS_ERROR
