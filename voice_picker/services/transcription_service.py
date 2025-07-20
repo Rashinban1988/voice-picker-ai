@@ -265,8 +265,8 @@ def transcribe_with_lemonfox_chunked(file_path: str, uploaded_file) -> bool:
         audio_segment = AudioSegment.from_file(file_path)
         total_duration = len(audio_segment) / 1000.0  # 秒単位
 
-        # 90MBずつに分割（100MBより少し小さくして安全マージンを確保）
-        chunk_size_mb = 90
+        # 25MBずつに分割（WAV形式でもLemonFox APIの制限内に収まるサイズ）
+        chunk_size_mb = 25
         chunk_size_bytes = chunk_size_mb * 1024 * 1024
 
         # ファイルサイズから推定される分割数

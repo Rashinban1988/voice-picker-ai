@@ -163,27 +163,53 @@ def generate_hls_async(self, uploaded_file_id):
         def detect_hardware_acceleration():
             """利用可能なハードウェアアクセラレーションを検出"""
             try:
-                # NVIDIA GPU (NVENC)
+                # NVIDIA GPU (NVENC) - 実際に使用可能か検証
                 result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'],
                                       capture_output=True, text=True)
                 if 'h264_nvenc' in result.stdout:
-                    return 'nvenc'
+                    # NVENCが実際に使用可能かテスト
+                    test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x240:rate=1',
+                               '-c:v', 'h264_nvenc', '-f', 'null', '-']
+                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    if test_result.returncode == 0:
+                        processing_logger.info("NVENC hardware acceleration available and working")
+                        return 'nvenc'
+                    else:
+                        processing_logger.warning("NVENC listed but not functional, falling back to software")
 
                 # Intel Quick Sync (QSV)
                 if 'h264_qsv' in result.stdout:
-                    return 'qsv'
+                    test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x240:rate=1',
+                               '-c:v', 'h264_qsv', '-f', 'null', '-']
+                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    if test_result.returncode == 0:
+                        processing_logger.info("QSV hardware acceleration available and working")
+                        return 'qsv'
 
                 # AMD VCE
                 if 'h264_amf' in result.stdout:
-                    return 'amf'
+                    test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x240:rate=1',
+                               '-c:v', 'h264_amf', '-f', 'null', '-']
+                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    if test_result.returncode == 0:
+                        processing_logger.info("AMF hardware acceleration available and working")
+                        return 'amf'
 
                 # Apple VideoToolbox (macOS)
                 if 'h264_videotoolbox' in result.stdout:
-                    return 'videotoolbox'
+                    test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x240:rate=1',
+                               '-c:v', 'h264_videotoolbox', '-f', 'null', '-']
+                    test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+                    if test_result.returncode == 0:
+                        processing_logger.info("VideoToolbox hardware acceleration available and working")
+                        return 'videotoolbox'
 
+            except subprocess.TimeoutExpired:
+                processing_logger.warning("Hardware acceleration test timed out")
             except Exception as e:
                 processing_logger.warning(f"Hardware acceleration detection failed: {e}")
 
+            processing_logger.info("No working hardware acceleration found, using software encoding")
             return None
 
         # 並列処理用の関数
@@ -303,8 +329,15 @@ def generate_hls_async(self, uploaded_file_id):
     except Exception as e:
         processing_logger.error(f"Error in HLS generation: {e}")
 
-        # メモリ不足やタイムアウトの場合は再試行しない
-        if 'memory' in str(e).lower() or 'timeout' in str(e).lower():
+        # ハードウェアエンコーダーエラー、メモリ不足、タイムアウトの場合は再試行しない
+        error_str = str(e).lower()
+        non_retryable_errors = [
+            'memory', 'timeout', 'nvenc', 'qsv', 'amf', 'videotoolbox',
+            'cannot load libcuda', 'encoder not found', 'codec not found',
+            'hardware acceleration', 'libcuda.so', 'nvidia'
+        ]
+        
+        if any(error in error_str for error in non_retryable_errors):
             try:
                 uploaded_file.status = STATUS_ERROR
                 uploaded_file.save()
@@ -313,4 +346,5 @@ def generate_hls_async(self, uploaded_file_id):
             processing_logger.error(f"Non-retryable error in HLS generation: {e}")
             return {"success": False, "error": str(e)}
 
+        # その他のエラーのみリトライ（最大3回、5分間隔）
         raise self.retry(exc=e, countdown=300)  # 5分後にリトライ
