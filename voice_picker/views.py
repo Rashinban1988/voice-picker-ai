@@ -598,17 +598,13 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                     django_logger.info(f"File path for async tasks: {file_path}")
 
                     # 文字起こし処理を非同期で実行（全ファイル対象）
+                    # HLS変換は文字起こし完了後に自動的に開始されます
                     django_logger.info(f"Queuing transcription task for {uploaded_file.id}")
                     transcribe_result = transcribe_and_save_async.delay(file_path, str(uploaded_file.id))
                     django_logger.info(f"Transcription task queued with ID: {transcribe_result.id}")
 
-                    # 動画ファイルの場合、HLS変換も非同期で実行
                     if uploaded_file.file.name.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
-                        django_logger.info(f"Queuing HLS task for video file {uploaded_file.id}")
-                        hls_result = generate_hls_async.delay(str(uploaded_file.id))
-                        django_logger.info(f"HLS task queued with ID: {hls_result.id}")
-                    else:
-                        django_logger.info(f"File {uploaded_file.file.name} is not a video, skipping HLS")
+                        django_logger.info(f"HLS conversion will be queued automatically after transcription completes")
 
                 except Exception as task_error:
                     django_logger.error(f"Error queuing async tasks: {task_error}", exc_info=True)

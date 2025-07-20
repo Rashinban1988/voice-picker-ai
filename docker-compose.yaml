@@ -37,7 +37,7 @@ services:
     image: config
     env_file:
       - .env
-    command: celery -A config worker --loglevel=info --concurrency=2
+    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=1000000
     volumes:
       - .:/code
     networks:
@@ -45,6 +45,8 @@ services:
     depends_on:
       - redis
       - django
+    mem_limit: 2g
+    memswap_limit: 2g
 
   zoom_bot_server:
     build: ./zoom_bot_server

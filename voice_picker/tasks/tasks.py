@@ -68,6 +68,15 @@ def transcribe_and_save_async(self, file_path, uploaded_file_id):
             except Exception as analysis_error:
                 processing_logger.error(f"Failed to queue AI analysis: {analysis_error}")
 
+            # 動画ファイルの場合、文字起こし完了後にHLS変換を開始
+            try:
+                if uploaded_file.file.name.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm')):
+                    processing_logger.info(f"Queuing HLS task for video file {uploaded_file_id} after transcription")
+                    generate_hls_async.delay(uploaded_file_id)
+                    processing_logger.info(f"HLS task queued for uploaded_file_id: {uploaded_file_id}")
+            except Exception as hls_error:
+                processing_logger.error(f"Failed to queue HLS task: {hls_error}")
+
             return {"success": True, "uploaded_file_id": uploaded_file_id}
         else:
             # 失敗時はステータスをエラーに更新
@@ -364,8 +373,13 @@ def generate_hls_async(self, uploaded_file_id):
         processing_logger.info("Starting parallel HLS generation")
         successful_variants = []
 
-        # CPU コア数に応じたワーカー数調整（最小2、最大4）
-        max_workers = min(2, max(1, multiprocessing.cpu_count() // 2))
+        # CPU コア数に応じたワーカー数調整
+        cpu_count = multiprocessing.cpu_count()
+        if settings.SYSTEM_MEMORY_GB < 8:  # 環境変数で設定
+            max_workers = 1  # メモリ不足環境
+        else:
+            # メモリ十分な場合はCPUコア数の半分（最大4）
+            max_workers = min(4, max(1, cpu_count // 2))
         processing_logger.info(f"Using {max_workers} workers for parallel processing")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
