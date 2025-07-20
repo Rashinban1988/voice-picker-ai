@@ -1,0 +1,21 @@
+[Unit]
+Description=Memory Monitor for Django Voice Picker App
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=vpi
+Group=vpi
+WorkingDirectory=/home/vpi/django-app
+ExecStart=/home/vpi/django-app/scripts/monitor_memory.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/vpi/django-app/logs/memory_monitor.log
+StandardError=append:/home/vpi/django-app/logs/memory_monitor.log
+
+# 環境変数
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target
