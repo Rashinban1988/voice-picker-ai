@@ -67,6 +67,7 @@ class UploadedFile(models.Model):
 #     is_scheduled = models.BooleanField(default=False, verbose_name='予約録画フラグ')
 #     meeting_details = models.JSONField(default=dict, blank=True, verbose_name='会議詳細情報')
 
+    @property
     def transcriptions(self):
         from .transcription import Transcription
         return Transcription.objects.filter(uploaded_file=self)
