@@ -296,16 +296,16 @@ def transcribe_with_lemonfox_chunked(file_path: str, uploaded_file) -> bool:
         processing_logger.info(f"推定分割数: {estimated_chunks}, チャンク時間: {chunk_duration}秒")
 
         all_transcriptions = []
-        
+
         # 一時ディレクトリ作成
         with tempfile.TemporaryDirectory() as temp_dir:
             # ffmpegで分割（メモリ使用量最小）
             for i in range(estimated_chunks):
                 chunk_start = i * chunk_duration
                 chunk_end = min((i + 1) * chunk_duration, total_duration)
-                
+
                 chunk_file = os.path.join(temp_dir, f"chunk_{i:03d}.wav")
-                
+
                 # ffmpegで該当部分を切り出し
                 cmd = [
                     'ffmpeg', '-y', '-i', file_path,
@@ -315,43 +315,81 @@ def transcribe_with_lemonfox_chunked(file_path: str, uploaded_file) -> bool:
                     '-ar', '16000',
                     chunk_file
                 ]
-                
+
                 subprocess.run(cmd, capture_output=True, check=True)
                 processing_logger.info(f"チャンク {i+1}/{estimated_chunks} 作成完了: {chunk_start:.1f}s - {chunk_end:.1f}s")
-                
+
                 # 即座に文字起こし処理
                 processing_logger.info(f"チャンク {i+1} の文字起こしを開始")
                 result = lemonfox_transcribe_with_retry(chunk_file)
-                
+
                 if result and 'segments' in result:
-                    # タイムスタンプを調整してDBに保存
+                    # タイムスタンプを調整してall_transcriptionsに追加（DB保存は後で行う）
                     for segment in result['segments']:
                         adjusted_start_time = segment.get('start', 0.0) + chunk_start
+                        adjusted_end_time = segment.get('end', 0.0) + chunk_start
                         speaker_label = segment.get('speaker', 'SPEAKER_00')
                         text = segment.get('text', '')
 
-                        if text.strip():  # 空でないテキストのみ保存
-                            Transcription.objects.create(
-                                uploaded_file=uploaded_file,
-                                text=text,
-                                speaker=speaker_label,
-                                start_time=int(adjusted_start_time)
-                            )
-
+                        if text.strip():  # 空でないテキストのみ追加
                             all_transcriptions.append({
-                                'start_time': adjusted_start_time,
+                                'start': adjusted_start_time,
+                                'end': adjusted_end_time,
                                 'text': text,
                                 'speaker': speaker_label
                             })
                 else:
                     processing_logger.warning(f"チャンク {i+1} の文字起こしに失敗")
 
-        processing_logger.info(f"分割文字起こし完了: 総セグメント数 {len(all_transcriptions)}")
+        # すべてのチャンクを処理した後にマージ処理を実行
+        if all_transcriptions:
+            # 時系列順にソート
+            all_transcriptions.sort(key=lambda x: x['start'])
+
+            # 同一話者の連続セグメントをマージ
+            merged_transcriptions = merge_continuous_speaker_segments(all_transcriptions)
+
+            processing_logger.info(f"分割文字起こし完了: 総セグメント数 {len(all_transcriptions)} -> マージ後: {len(merged_transcriptions)}")
+
+            # マージ後のデータをDBに保存
+            for segment in merged_transcriptions:
+                Transcription.objects.create(
+                    uploaded_file=uploaded_file,
+                    text=segment['text'],
+                    speaker=segment['speaker'],
+                    start_time=int(segment['start'])
+                )
+
         return True
 
     except Exception as e:
         processing_logger.error(f"分割文字起こし処理でエラーが発生しました: {e}")
         return False
+
+def merge_continuous_speaker_segments(segments, max_gap_seconds=30):
+    """
+    同一話者の連続セグメントを30秒以内でマージする
+    """
+    if not segments:
+        return segments
+
+    merged = []
+    current_segment = segments[0].copy()
+
+    for next_segment in segments[1:]:
+        # 同一話者で時間間隔が指定秒数以内の場合
+        if (current_segment.get('speaker') == next_segment.get('speaker') and
+            next_segment.get('start', 0) - current_segment.get('end', 0) <= max_gap_seconds):
+            # セグメントをマージ
+            current_segment['text'] += ' ' + next_segment.get('text', '')
+            current_segment['end'] = next_segment.get('end', current_segment.get('end', 0))
+        else:
+            # 新しいセグメントとして追加
+            merged.append(current_segment)
+            current_segment = next_segment.copy()
+
+    merged.append(current_segment)
+    return merged
 
 def transcribe_with_lemonfox_single_file(file_path: str, uploaded_file) -> bool:
     """
@@ -365,19 +403,25 @@ def transcribe_with_lemonfox_single_file(file_path: str, uploaded_file) -> bool:
 
         # LemonFoxのレスポンス形式を処理
         if 'segments' in transcription_result:
-            # セグメント情報がある場合
-            for segment in transcription_result['segments']:
+            # セグメント情報がある場合、まずマージ処理を実行
+            segments = transcription_result['segments']
+            merged_segments = merge_continuous_speaker_segments(segments)
+
+            processing_logger.info(f"セグメント数: {len(segments)} -> マージ後: {len(merged_segments)}")
+
+            for segment in merged_segments:
                 speaker_label = segment.get('speaker', 'SPEAKER_00')
                 text = segment.get('text', '')
                 start_time = segment.get('start', 0.0)
                 end_time = segment.get('end', 0.0)
 
-                Transcription.objects.create(
-                    uploaded_file=uploaded_file,
-                    text=text,
-                    speaker=speaker_label,
-                    start_time=int(start_time)
-                )
+                if text.strip():  # 空でないテキストのみ保存
+                    Transcription.objects.create(
+                        uploaded_file=uploaded_file,
+                        text=text,
+                        speaker=speaker_label,
+                        start_time=int(start_time)
+                    )
 
         elif 'text' in transcription_result:
             # セグメント情報がない場合は全体テキストとして保存
