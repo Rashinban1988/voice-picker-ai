@@ -75,7 +75,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     token = models.CharField(max_length=255, null=True, blank=True, verbose_name='トークン')
 
     # 2要素認証関連のフィールド
-    two_factor_enabled = models.BooleanField(default=False, verbose_name='2要素認証有効')
+    two_factor_enabled = models.BooleanField(default=True, verbose_name='2要素認証有効')
     two_factor_method = models.CharField(
         max_length=10,
         choices=[('email', 'メール'), ('sms', 'SMS')],

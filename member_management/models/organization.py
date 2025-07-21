@@ -52,8 +52,12 @@ class Organization(models.Model):
         except Subscription.DoesNotExist:
             return None
 
-    def get_max_duration(self):
+    def get_max_duration(self, user=None):
         """組織の最大利用可能時間（分）を取得"""
+        # スーパーユーザーまたはスタッフの場合は無制限
+        if user and (user.is_superuser or user.is_staff):
+            return 999999  # 無制限
+
         # テストモードの場合は無制限
         import os
         if os.getenv('TESTING_MODE') == 'true' and os.getenv('TEST_UNLIMITED_UPLOAD') == 'true':
