@@ -256,105 +256,79 @@ def transcribe_with_lemonfox_full_file(file_path: str, uploaded_file) -> bool:
 
 def transcribe_with_lemonfox_chunked(file_path: str, uploaded_file) -> bool:
     """
-    100MB以上のファイルを分割してLemonFox.ai APIで文字起こし
+    100MB以上のファイルをffmpegで分割してLemonFox.ai APIで文字起こし
     """
+    import subprocess
     try:
         processing_logger.info(f"大容量ファイルの分割処理を開始: {file_path}")
 
-        # 音声ファイルを読み込み
-        audio_segment = AudioSegment.from_file(file_path)
-        total_duration = len(audio_segment) / 1000.0  # 秒単位
+        # ffmpegで音声の総時間を取得（メモリ効率的）
+        cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', file_path]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        total_duration = float(result.stdout.strip())
+        processing_logger.info(f"総時間: {total_duration:.1f}秒")
 
-        # 25MBずつに分割（WAV形式でもLemonFox APIの制限内に収まるサイズ）
-        chunk_size_mb = 25
-        chunk_size_bytes = chunk_size_mb * 1024 * 1024
+        # 5分（300秒）ごとに分割
+        chunk_duration = 300  # 5分
+        estimated_chunks = int((total_duration + chunk_duration - 1) // chunk_duration)
+        processing_logger.info(f"推定分割数: {estimated_chunks}, チャンク時間: {chunk_duration}秒")
 
-        # ファイルサイズから推定される分割数
-        file_size = os.path.getsize(file_path)
-        estimated_chunks = (file_size + chunk_size_bytes - 1) // chunk_size_bytes
-
-        # 時間で分割（各チャンクが約90MBになるように）
-        chunk_duration = total_duration / estimated_chunks
-        processing_logger.info(f"推定分割数: {estimated_chunks}, チャンク時間: {chunk_duration:.1f}秒")
-
-        chunks_info = []
-        current_start = 0.0
-
-        # 分割処理
-        for i in range(estimated_chunks):
-            chunk_start = current_start
-            chunk_end = min(chunk_start + chunk_duration, total_duration)
-
-            # 音声セグメントを抽出
-            chunk_audio = audio_segment[chunk_start*1000:chunk_end*1000]
-
-            # 一時ファイルに保存
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
-                chunk_audio.export(tmp_file.name, format='wav')
-                tmp_file_path = tmp_file.name
-
-            chunks_info.append({
-                'file_path': tmp_file_path,
-                'start_offset': chunk_start,
-                'end_offset': chunk_end,
-                'chunk_index': i
-            })
-
-            current_start = chunk_end
-
-            processing_logger.info(f"チャンク {i+1}/{estimated_chunks} 作成完了: {chunk_start:.1f}s - {chunk_end:.1f}s")
-
-        # 各チャンクを並列処理
         all_transcriptions = []
+        
+        # 一時ディレクトリ作成
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # ffmpegで分割（メモリ使用量最小）
+            for i in range(estimated_chunks):
+                chunk_start = i * chunk_duration
+                chunk_end = min((i + 1) * chunk_duration, total_duration)
+                
+                chunk_file = os.path.join(temp_dir, f"chunk_{i:03d}.wav")
+                
+                # ffmpegで該当部分を切り出し
+                cmd = [
+                    'ffmpeg', '-y', '-i', file_path,
+                    '-ss', str(chunk_start),
+                    '-t', str(chunk_end - chunk_start),
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    chunk_file
+                ]
+                
+                subprocess.run(cmd, capture_output=True, check=True)
+                processing_logger.info(f"チャンク {i+1}/{estimated_chunks} 作成完了: {chunk_start:.1f}s - {chunk_end:.1f}s")
+                
+                # 即座に文字起こし処理
+                processing_logger.info(f"チャンク {i+1} の文字起こしを開始")
+                result = lemonfox_transcribe_with_retry(chunk_file)
+                
+                if result and 'segments' in result:
+                    # タイムスタンプを調整してDBに保存
+                    for segment in result['segments']:
+                        adjusted_start_time = segment.get('start', 0.0) + chunk_start
+                        speaker_label = segment.get('speaker', 'SPEAKER_00')
+                        text = segment.get('text', '')
 
-        for chunk_info in chunks_info:
-            processing_logger.info(f"チャンク {chunk_info['chunk_index']+1} の文字起こしを開始")
+                        if text.strip():  # 空でないテキストのみ保存
+                            Transcription.objects.create(
+                                uploaded_file=uploaded_file,
+                                text=text,
+                                speaker=speaker_label,
+                                start_time=int(adjusted_start_time)
+                            )
 
-            # LemonFox APIで文字起こし
-            result = lemonfox_transcribe_with_retry(chunk_info['file_path'])
-
-            if result and 'segments' in result:
-                # タイムスタンプを調整してDBに保存
-                for segment in result['segments']:
-                    adjusted_start_time = segment.get('start', 0.0) + chunk_info['start_offset']
-                    speaker_label = segment.get('speaker', 'SPEAKER_00')
-                    text = segment.get('text', '')
-
-                    if text.strip():  # 空でないテキストのみ保存
-                        Transcription.objects.create(
-                            uploaded_file=uploaded_file,
-                            text=text,
-                            speaker=speaker_label,
-                            start_time=int(adjusted_start_time)
-                        )
-
-                        all_transcriptions.append({
-                            'start_time': adjusted_start_time,
-                            'text': text,
-                            'speaker': speaker_label
-                        })
-
-            # 一時ファイルを削除
-            try:
-                os.unlink(chunk_info['file_path'])
-            except:
-                pass
-
-            processing_logger.info(f"チャンク {chunk_info['chunk_index']+1} の処理完了")
+                            all_transcriptions.append({
+                                'start_time': adjusted_start_time,
+                                'text': text,
+                                'speaker': speaker_label
+                            })
+                else:
+                    processing_logger.warning(f"チャンク {i+1} の文字起こしに失敗")
 
         processing_logger.info(f"分割文字起こし完了: 総セグメント数 {len(all_transcriptions)}")
         return True
 
     except Exception as e:
         processing_logger.error(f"分割文字起こし処理でエラーが発生しました: {e}")
-
-        # エラー時は一時ファイルを削除
-        for chunk_info in chunks_info:
-            try:
-                os.unlink(chunk_info['file_path'])
-            except:
-                pass
-
         return False
 
 def transcribe_with_lemonfox_single_file(file_path: str, uploaded_file) -> bool:
