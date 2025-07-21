@@ -376,3 +376,6 @@ SECURE_BROWSER_XSS_FILTER = True    # X-XSS-Protection: 1; mode=block
 # ファイルアップロードの設定
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1073741824  # 1GB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1073741824  # 1GB
+
+# システムメモリ設定（HLS生成用）
+SYSTEM_MEMORY_GB = 8  # 12GB環境（実使用可能メモリを考慮）
