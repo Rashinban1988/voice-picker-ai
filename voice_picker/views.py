@@ -1579,6 +1579,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            # 回数制限チェック（5回まで）
+            if uploaded_file.summarization_generation_count >= 5:
+                return Response({
+                    "error": "要約の再生成回数が上限（5回）に達しています",
+                    "generation_count": uploaded_file.summarization_generation_count,
+                    "max_generations": 5,
+                    "remaining_generations": 0
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
@@ -1589,12 +1598,20 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
 
             summary_text = summarize_text_with_instruction(all_transcription_text, instruction)
+
+            # 再生成回数をインクリメントして保存
             uploaded_file.summarization = summary_text
+            uploaded_file.summarization_generation_count += 1
             uploaded_file.save()
+
+            remaining_generations = 5 - uploaded_file.summarization_generation_count
 
             return Response({
                 "message": "要約が再生成されました",
-                "summary": summary_text
+                "summary": summary_text,
+                "generation_count": uploaded_file.summarization_generation_count,
+                "max_generations": 5,
+                "remaining_generations": remaining_generations
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -1631,6 +1648,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            # 回数制限チェック（5回まで）
+            if uploaded_file.issue_generation_count >= 5:
+                return Response({
+                    "error": "課題の再生成回数が上限（5回）に達しています",
+                    "generation_count": uploaded_file.issue_generation_count,
+                    "max_generations": 5,
+                    "remaining_generations": 0
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
@@ -1641,12 +1667,20 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
 
             issue_text = definition_issue_with_instruction(all_transcription_text, instruction)
+
+            # 再生成回数をインクリメントして保存
             uploaded_file.issue = issue_text
+            uploaded_file.issue_generation_count += 1
             uploaded_file.save()
+
+            remaining_generations = 5 - uploaded_file.issue_generation_count
 
             return Response({
                 "message": "課題が再生成されました",
-                "issues": issue_text
+                "issues": issue_text,
+                "generation_count": uploaded_file.issue_generation_count,
+                "max_generations": 5,
+                "remaining_generations": remaining_generations
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -1683,6 +1717,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
+            # 回数制限チェック（5回まで）
+            if uploaded_file.solution_generation_count >= 5:
+                return Response({
+                    "error": "取り組み案の再生成回数が上限（5回）に達しています",
+                    "generation_count": uploaded_file.solution_generation_count,
+                    "max_generations": 5,
+                    "remaining_generations": 0
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
             transcriptions = uploaded_file.transcription.all().order_by('start_time')
             if not transcriptions.exists():
                 return Response(
@@ -1693,12 +1736,20 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             all_transcription_text = "".join(transcription.text for transcription in transcriptions)
 
             solution_text = definition_solution_with_instruction(all_transcription_text, instruction)
+
+            # 再生成回数をインクリメントして保存
             uploaded_file.solution = solution_text
+            uploaded_file.solution_generation_count += 1
             uploaded_file.save()
+
+            remaining_generations = 5 - uploaded_file.solution_generation_count
 
             return Response({
                 "message": "取り組み案が再生成されました",
-                "solutions": solution_text
+                "solutions": solution_text,
+                "generation_count": uploaded_file.solution_generation_count,
+                "max_generations": 5,
+                "remaining_generations": remaining_generations
             }, status=status.HTTP_200_OK)
 
         except Exception as e:

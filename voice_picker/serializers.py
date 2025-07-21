@@ -12,6 +12,11 @@ class EnvironmentSerializer(serializers.ModelSerializer):
 class UploadedFileSerializer(serializers.ModelSerializer):
     organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all(), required=False)
     file = serializers.FileField()
+    # 再生成回数関連の追加フィールド
+    remaining_summarization_generations = serializers.SerializerMethodField()
+    remaining_issue_generations = serializers.SerializerMethodField()
+    remaining_solution_generations = serializers.SerializerMethodField()
+    max_generations = serializers.SerializerMethodField()
 
     class Meta:
         model = UploadedFile
@@ -20,6 +25,22 @@ class UploadedFileSerializer(serializers.ModelSerializer):
 
     def get_file(self, obj):
         return os.path.basename(obj.file.name) if obj.file else None
+
+    def get_remaining_summarization_generations(self, obj):
+        """要約の残り再生成回数を計算"""
+        return max(0, 5 - obj.summarization_generation_count)
+
+    def get_remaining_issue_generations(self, obj):
+        """課題の残り再生成回数を計算"""
+        return max(0, 5 - obj.issue_generation_count)
+
+    def get_remaining_solution_generations(self, obj):
+        """取り組み案の残り再生成回数を計算"""
+        return max(0, 5 - obj.solution_generation_count)
+
+    def get_max_generations(self, obj):
+        """最大再生成回数を返す"""
+        return 5
 
 class TranscriptionSerializer(serializers.ModelSerializer):
     uploaded_file = serializers.PrimaryKeyRelatedField(queryset=UploadedFile.objects.all())

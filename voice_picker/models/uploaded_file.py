@@ -13,19 +13,19 @@ def organization_upload_to(instance, filename):
     重複ファイル名を避けるため、必要に応じてファイル名を変更
     """
     organization_id = str(instance.organization.id)
-    
+
     name, ext = os.path.splitext(filename)
-    
+
     base_path = os.path.join(organization_id, filename)
     counter = 1
-    
+
     while UploadedFile.objects.filter(
         organization=instance.organization,
         file__endswith=f"/{filename}" if counter == 1 else f"/{name}_{counter}{ext}"
     ).exists():
         filename = f"{name}_{counter}{ext}"
         counter += 1
-    
+
     return os.path.join(organization_id, filename)
 
 class UploadedFile(models.Model):
@@ -46,12 +46,17 @@ class UploadedFile(models.Model):
     summarization = models.TextField(null=True, blank=True, verbose_name='文書要約結果')  # 文書要約結果
     issue = models.TextField(null=True, blank=True, verbose_name='課題点')  # 課題点
     solution = models.TextField(null=True, blank=True, verbose_name='取り組み案')  # 取り組み案
+
+    # 再生成回数制限
+    summarization_generation_count = models.IntegerField(default=0, verbose_name='要約再生成回数')
+    issue_generation_count = models.IntegerField(default=0, verbose_name='課題再生成回数')
+    solution_generation_count = models.IntegerField(default=0, verbose_name='取り組み案再生成回数')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
     exist = models.BooleanField(default=True, verbose_name='存在')
     hls_playlist_path = models.CharField(max_length=500, null=True, blank=True, verbose_name='HLSプレイリストパス')
-    
+
 #     # Zoom会議録画用フィールド
 #     source_type = models.CharField(max_length=20, default='upload', verbose_name='ソース種別')  # 'upload', 'zoom_meeting', 'scheduled_recording'
 #     meeting_url = models.URLField(null=True, blank=True, verbose_name='会議URL')
@@ -61,7 +66,7 @@ class UploadedFile(models.Model):
 #     recording_start_time = models.DateTimeField(null=True, blank=True, verbose_name='録画開始時刻')
 #     recording_end_time = models.DateTimeField(null=True, blank=True, verbose_name='録画終了時刻')
 #     bot_process_id = models.IntegerField(null=True, blank=True, verbose_name='ボットプロセスID')
-    
+
 #     # 予約録画用フィールド
 #     scheduled_start_time = models.DateTimeField(null=True, blank=True, verbose_name='予約開始時刻')
 #     is_scheduled = models.BooleanField(default=False, verbose_name='予約録画フラグ')
@@ -104,7 +109,7 @@ def delete_old_file(sender, instance, **kwargs):
                     other_files_using_same_path = UploadedFile.objects.filter(
                         file=old_file.name
                     ).exclude(pk=instance.pk).exists()
-                    
+
                     if not other_files_using_same_path:
                         os.remove(old_file.path)
 
@@ -116,10 +121,10 @@ def delete_file_on_delete(sender, instance, **kwargs):
             other_files_using_same_path = UploadedFile.objects.filter(
                 file=instance.file.name
             ).exists()
-            
+
             if not other_files_using_same_path:
                 os.remove(instance.file.path)
-                
+
                 try:
                     dir_path = os.path.dirname(instance.file.path)
                     if os.path.exists(dir_path) and not os.listdir(dir_path):
