@@ -234,12 +234,14 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             )
         total_duration = sum(uploaded_file.duration or 0 for uploaded_file in uploaded_files)
 
-        # テストモードの場合は制限を無効化
-        if os.getenv('TESTING_MODE') == 'true' and os.getenv('TEST_UNLIMITED_UPLOAD') == 'true':
-            max_duration = 999999  # 無制限（実質的に）
+        # userをget_max_durationに渡すように修正
+        max_duration = organization.get_max_duration(user=user)
+
+        # ログ出力
+        if user.is_superuser or user.is_staff:
+            api_logger.info(f"Admin user {user.username}: Unlimited upload enabled")
+        elif os.getenv('TESTING_MODE') == 'true' and os.getenv('TEST_UNLIMITED_UPLOAD') == 'true':
             api_logger.info("Testing mode: Unlimited upload enabled")
-        else:
-            max_duration = organization.get_max_duration()
 
         return Response({
             "total_duration": total_duration,
@@ -343,7 +345,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
                     "description": "低画質（モバイル向け）"
                 },
                 {
-                    "name": "720p", 
+                    "name": "720p",
                     "bandwidth": 1628000,  # 1500k video + 128k audio
                     "resolution": "1280x720",
                     "description": "高画質（デスクトップ向け）"
