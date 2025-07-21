@@ -21,8 +21,8 @@ services:
       - "${DEBUG_PORT}:${DEBUG_PORT}"
     depends_on:
       - redis
-    mem_limit: 2.5g
-    memswap_limit: 2.5g
+    mem_limit: 4g
+    memswap_limit: 4g
 
   redis:
     image: redis:7-alpine
@@ -41,7 +41,7 @@ services:
     image: config
     env_file:
       - .env
-    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=4000000 --max-tasks-per-child=3
+    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=6500000 --max-tasks-per-child=2
     volumes:
       - .:/code
     networks:
@@ -49,31 +49,31 @@ services:
     depends_on:
       - redis
       - django
-    mem_limit: 6g
-    memswap_limit: 6g
+    mem_limit: 7g
+    memswap_limit: 7g
 
-  zoom_bot_server:
-    build: ./zoom_bot_server
-    platform: linux/amd64
-    env_file:
-      - ./zoom_bot_server/.env
-    environment:
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./zoom_bot_server:/app
-      - ./media/zoom_recordings:/app/media/zoom_recordings
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /run/user/1000/pulse:/run/user/1000/pulse:rw
-    devices:
-      - /dev/snd
-    privileged: true
-    networks:
-      - webdev
-    working_dir: /app
-    mem_limit: 1g
-    memswap_limit: 1g
+  # zoom_bot_server:
+  #   build: ./zoom_bot_server
+  #   platform: linux/amd64
+  #   env_file:
+  #     - ./zoom_bot_server/.env
+  #   environment:
+  #     - PULSE_SERVER=unix:/run/user/1000/pulse/native
+  #   ports:
+  #     - "4000:4000"
+  #   volumes:
+  #     - ./zoom_bot_server:/app
+  #     - ./media/zoom_recordings:/app/media/zoom_recordings
+  #     - /tmp/.X11-unix:/tmp/.X11-unix:rw
+  #     - /run/user/1000/pulse:/run/user/1000/pulse:rw
+  #   devices:
+  #     - /dev/snd
+  #   privileged: true
+  #   networks:
+  #     - webdev
+  #   working_dir: /app
+  #   mem_limit: 1g
+  #   memswap_limit: 1g
 
 volumes:
   redis_data:
