@@ -1321,19 +1321,7 @@ def summarize_text(text: str) -> str:
     Returns:
         str: マークダウン形式で要約されたテキスト
     """
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "あなたは文章を分析し、要約を作成する専門家です。応答は必ずマークダウン形式で出力してください。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で要約を作成してください：\\n\\n{text}"}
-            ],
-            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
-        )
-        return remove_markdown_blocks(response.choices[0].message.content)
-    except Exception as e:
-        processing_logger.error(f"テキスト要約中にエラーが発生しました: {e}")
-        return "要約に失敗しました。"
+    return summarize_text_with_instruction(text, "")
 
 def definition_issue(text: str) -> str:
     """
@@ -1344,19 +1332,7 @@ def definition_issue(text: str) -> str:
     Returns:
         str: マークダウン形式で主要な課題点
     """
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "あなたは文章を分析し、主要な課題点を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で主要な課題点を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
-            ],
-            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
-        )
-        return remove_markdown_blocks(response.choices[0].message.content)
-    except Exception as e:
-        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
-        return "分析に失敗しました。"
+    return definition_issue_with_instruction(text, "")
 
 def definition_solution(text: str) -> str:
     """
@@ -1367,19 +1343,7 @@ def definition_solution(text: str) -> str:
     Returns:
         str: マークダウン形式で取り組み案
     """
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "あなたは文章を分析し、取り組み案を特定する専門家です。応答は必ずマークダウン形式で出力してください。"},
-                {"role": "user", "content": f"以下の文章の内容を読み取り、マークダウン形式で取り組み案を挙げられるだけ、箇条書きで簡潔に列挙してください：\\n\\n{text}"}
-            ],
-            max_tokens=1500  # 応答の最大長を制限（詳細な構造化出力のため増量）
-        )
-        return remove_markdown_blocks(response.choices[0].message.content)
-    except Exception as e:
-        processing_logger.error(f"テキスト分析中にエラーが発生しました: {e}")
-        return "分析に失敗しました。"
+    return definition_solution_with_instruction(text, "")
 
 def create_meeting_minutes(text: str) -> str:
     """
