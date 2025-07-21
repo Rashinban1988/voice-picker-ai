@@ -41,7 +41,7 @@ services:
     image: config
     env_file:
       - .env
-    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=6000000
+    command: celery -A config worker --loglevel=info --concurrency=1 --max-memory-per-child=4000000 --max-tasks-per-child=3
     volumes:
       - .:/code
     networks:

@@ -371,14 +371,20 @@ def generate_hls_async(self, uploaded_file_id):
         processing_logger.info("Starting parallel HLS generation")
         successful_variants = []
 
-        # CPU コア数に応じたワーカー数調整
+        # CPU コア数とファイルサイズに応じたワーカー数調整
         cpu_count = multiprocessing.cpu_count()
-        if settings.SYSTEM_MEMORY_GB < 8:  # 環境変数で設定
-            max_workers = 1  # メモリ不足環境
+        file_size_mb = os.path.getsize(file_path) / 1024 / 1024
+        
+        # 大容量ファイル（300MB以上）または低メモリ環境では並列処理無効
+        if settings.SYSTEM_MEMORY_GB <= 8 or file_size_mb > 300:
+            max_workers = 1  # 順次処理でメモリ安全
+            processing_logger.info(f"Large file ({file_size_mb:.1f}MB) or low memory environment: using sequential processing")
         else:
-            # メモリ十分な場合はCPUコア数の半分（最大4）
-            max_workers = min(4, max(1, cpu_count // 2))
-        processing_logger.info(f"Using {max_workers} workers for parallel processing")
+            # 小容量ファイルでメモリ十分な場合のみ並列処理
+            max_workers = min(2, max(1, cpu_count // 2))  # 最大2並列に制限
+            processing_logger.info(f"Small file ({file_size_mb:.1f}MB): using parallel processing")
+        
+        processing_logger.info(f"Using {max_workers} workers for HLS generation")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_variant = {executor.submit(process_variant, variant): variant for variant in variants}

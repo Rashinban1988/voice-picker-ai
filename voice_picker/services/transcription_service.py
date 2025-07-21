@@ -162,14 +162,24 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
             processing_logger.error("ファイルサイズが0です")
             return False
 
-        # 音声ファイルの再生時間を取得
+        # 音声ファイルの再生時間を取得（メモリ効率的にffprobeを使用）
         try:
-            audio_segment = AudioSegment.from_file(file_path)
-            duration_seconds = len(audio_segment) / 1000.0  # millisecondsからsecondsへ
+            import subprocess
+            cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', file_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            duration_seconds = float(result.stdout.strip())
             processing_logger.info(f"音声ファイルの再生時間: {duration_seconds}秒")
         except Exception as e:
-            processing_logger.error(f"音声ファイルの読み込みエラー: {e}")
-            return False
+            processing_logger.error(f"音声ファイルの再生時間取得エラー: {e}")
+            # フォールバック: AudioSegmentを使用（メモリ使用量注意）
+            try:
+                audio_segment = AudioSegment.from_file(file_path)
+                duration_seconds = len(audio_segment) / 1000.0
+                processing_logger.warning(f"ffprobe失敗、AudioSegmentで取得: {duration_seconds}秒")
+                del audio_segment  # 明示的にメモリ解放
+            except Exception as e2:
+                processing_logger.error(f"音声ファイルの読み込みエラー: {e2}")
+                return False
 
         # 既存のTranscriptionデータを削除
         Transcription.objects.filter(uploaded_file=uploaded_file).delete()
@@ -187,19 +197,31 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
         segments = perform_speaker_diarization(file_path)
         processing_logger.info(f"話者分離完了: {len(segments)}個のセグメント")
 
-        # 各セグメントの文字起こし
+        # 各セグメントの文字起こし（メモリ効率的にffmpegで分割）
         for i, segment in enumerate(segments):
             processing_logger.info(f"セグメント {i+1}/{len(segments)} の文字起こし開始")
 
-            # セグメントの音声を抽出
-            segment_audio = audio_segment[segment['start']*1000:segment['end']*1000]
-
-            # 一時ファイルに保存
+            # ffmpegで該当セグメントを切り出し（メモリ効率的）
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
-                segment_audio.export(tmp_file.name, format='wav')
                 tmp_file_path = tmp_file.name
 
             try:
+                # ffmpegでセグメント切り出し
+                import subprocess
+                cmd = [
+                    'ffmpeg', '-y', '-i', file_path,
+                    '-ss', str(segment['start']),
+                    '-t', str(segment['end'] - segment['start']),
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    tmp_file_path
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    processing_logger.error(f"ffmpegでのセグメント切り出し失敗: {result.stderr}")
+                    continue
+
                 # 文字起こし実行
                 if transcription_provider == 'openai':
                     transcription_result = openai_transcribe_with_retry(tmp_file_path)
@@ -217,7 +239,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
                     text=text,
                     speaker=segment['speaker'],
                     start_time=int(segment['start'])
-                                    )
+                )
 
                 processing_logger.info(f"セグメント {i+1} の文字起こし完了: {text[:50]}...")
 
@@ -236,18 +258,18 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
 def transcribe_with_lemonfox_full_file(file_path: str, uploaded_file) -> bool:
     """
     LemonFox.ai APIを使用してファイル全体を文字起こし（話者分離付き）
-    100MB以上のファイルは分割して処理
+    25MB以上のファイルは分割して処理（LemonFox API制限）
     """
     try:
-        # ファイルサイズチェック（100MB = 100 * 1024 * 1024 bytes）
+        # ファイルサイズチェック（25MB = 25 * 1024 * 1024 bytes）
         file_size = os.path.getsize(file_path)
-        max_size = 100 * 1024 * 1024  # 100MB
+        max_size = 25 * 1024 * 1024  # 25MB (LemonFox API制限)
 
         if file_size > max_size:
-            processing_logger.info(f"ファイルサイズが100MBを超過（{file_size} bytes）: 分割処理を実行")
+            processing_logger.info(f"ファイルサイズが25MBを超過（{file_size} bytes, {file_size/1024/1024:.1f}MB）: 分割処理を実行")
             return transcribe_with_lemonfox_chunked(file_path, uploaded_file)
         else:
-            processing_logger.info(f"ファイルサイズ {file_size} bytes: 通常処理")
+            processing_logger.info(f"ファイルサイズ {file_size} bytes ({file_size/1024/1024:.1f}MB): 通常処理")
             return transcribe_with_lemonfox_single_file(file_path, uploaded_file)
 
     except Exception as e:
@@ -361,10 +383,6 @@ def transcribe_with_lemonfox_single_file(file_path: str, uploaded_file) -> bool:
             # セグメント情報がない場合は全体テキストとして保存
             text = transcription_result['text']
 
-            # 音声ファイルの再生時間を取得
-            audio_segment = AudioSegment.from_file(file_path)
-            duration_seconds = len(audio_segment) / 1000.0
-
             Transcription.objects.create(
                 uploaded_file=uploaded_file,
                 text=text,
@@ -407,8 +425,21 @@ def perform_speaker_diarization(file_path):
     except Exception as e:
         processing_logger.warning(f"話者分離に失敗しました: {e}")
         # 話者分離が失敗した場合は全体を1つのセグメントとして扱う
-        audio_segment = AudioSegment.from_file(file_path)
-        duration_seconds = len(audio_segment) / 1000.0
+        try:
+            # ffprobeで再生時間を取得（メモリ効率的）
+            import subprocess
+            cmd = ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', file_path]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            duration_seconds = float(result.stdout.strip())
+        except Exception:
+            # フォールバック: AudioSegmentを使用
+            try:
+                audio_segment = AudioSegment.from_file(file_path)
+                duration_seconds = len(audio_segment) / 1000.0
+                del audio_segment  # 明示的にメモリ解放
+            except Exception:
+                # デフォルト値
+                duration_seconds = 3600.0  # 1時間とする
 
         return [{
             'start': 0.0,
