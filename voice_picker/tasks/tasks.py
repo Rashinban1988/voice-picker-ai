@@ -219,10 +219,8 @@ def generate_hls_async(self, uploaded_file_id):
         output_dir = os.path.join(hls_base_dir, str(uploaded_file_id))
         os.makedirs(output_dir, exist_ok=True)
 
-        # HLSパスを先に保存（フロントエンドの即座取得のため）
-        uploaded_file.hls_playlist_path = f"hls/{uploaded_file_id}/master.m3u8"
-        uploaded_file.save()
-        processing_logger.info(f"HLS path saved before generation: {uploaded_file.hls_playlist_path}")
+        # HLS生成開始（パスは完了時に保存）
+        processing_logger.info(f"HLS generation starting for: {uploaded_file_id}")
 
         # ffmpegコマンド（メモリ効率重視）
         playlist_path = os.path.join(output_dir, 'playlist.m3u8')
