@@ -334,12 +334,29 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             # HLSマスタープレイリストURL
             hls_url = f"/api/hls-stream/{uploaded_file.id}/master.m3u8?expires={expires}&signature={signature}"
 
+            # 利用可能な品質情報
+            qualities = [
+                {
+                    "name": "360p",
+                    "bandwidth": 564000,  # 500k video + 64k audio
+                    "resolution": "640x360",
+                    "description": "低画質（モバイル向け）"
+                },
+                {
+                    "name": "720p", 
+                    "bandwidth": 1628000,  # 1500k video + 128k audio
+                    "resolution": "1280x720",
+                    "description": "高画質（デスクトップ向け）"
+                }
+            ]
+
             return Response({
                 "hls_available": True,
                 "hls_url": hls_url,
                 "master_playlist_url": hls_url,
                 "expires_at": expires,
-                "content_type": "application/x-mpegURL"
+                "content_type": "application/x-mpegURL",
+                "qualities": qualities
             })
 
         except UploadedFile.DoesNotExist:
