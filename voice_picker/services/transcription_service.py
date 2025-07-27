@@ -216,7 +216,7 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
                     '-ar', '16000',
                     tmp_file_path
                 ]
-                
+
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
                     processing_logger.error(f"ffmpegでのセグメント切り出し失敗: {result.stderr}")
@@ -366,20 +366,27 @@ def transcribe_with_lemonfox_chunked(file_path: str, uploaded_file) -> bool:
         processing_logger.error(f"分割文字起こし処理でエラーが発生しました: {e}")
         return False
 
-def merge_continuous_speaker_segments(segments, max_gap_seconds=30):
+def merge_continuous_speaker_segments(segments, max_gap_seconds=30, max_segment_duration=30):
     """
-    同一話者の連続セグメントを30秒以内でマージする
+    同一話者の連続セグメントを30秒以内でマージし、30秒を超えたら分割する
     """
     if not segments:
         return segments
+
 
     merged = []
     current_segment = segments[0].copy()
 
     for next_segment in segments[1:]:
-        # 同一話者で時間間隔が指定秒数以内の場合
+        time_gap = next_segment.get('start', 0) - current_segment.get('end', 0)
+        # マージ後の総時間を計算
+        potential_duration = next_segment.get('end', 0) - current_segment.get('start', 0)
+
+        # 同一話者で時間間隔が指定秒数以内、かつマージ後の総時間が30秒以
+        # 内の場合
         if (current_segment.get('speaker') == next_segment.get('speaker') and
-            next_segment.get('start', 0) - current_segment.get('end', 0) <= max_gap_seconds):
+            time_gap <= max_gap_seconds and
+            potential_duration <= max_segment_duration):
             # セグメントをマージ
             current_segment['text'] += ' ' + next_segment.get('text', '')
             current_segment['end'] = next_segment.get('end', current_segment.get('end', 0))
