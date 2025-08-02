@@ -11,7 +11,7 @@ services:
     # command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --noreload" # デバッグ無
     # command: sh -c "cron -f & echo 'デバッグ待機中です...' && python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT} --noreload --nothreading" # デバッグ有
     # command: sh -c "cron -f & python -m debugpy --listen 0.0.0.0:${DEBUG_PORT} --wait-for-client -m manage runserver 0.0.0.0:${APP_PORT} --nothreading"
-    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT} --nothreading"
+    command: sh -c "cron -f & python manage.py runserver 0.0.0.0:${APP_PORT}"
     volumes:
       - .:/code
     networks:
