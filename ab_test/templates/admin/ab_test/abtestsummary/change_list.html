@@ -1,0 +1,77 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block result_list %}
+<div style="background: #f0f4f8; padding: 20px; margin-bottom: 20px; border-radius: 8px;">
+    <h2 style="margin-top: 0;">A/Bテスト統計情報</h2>
+
+    {% if total_stats %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+        <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h4 style="margin: 0 0 10px 0; color: #666;">総ページビュー</h4>
+            <p style="font-size: 24px; font-weight: bold; margin: 0;">{{ total_stats.total_page_views|default:0|floatformat:0 }}</p>
+        </div>
+        <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h4 style="margin: 0 0 10px 0; color: #666;">総コンバージョン</h4>
+            <p style="font-size: 24px; font-weight: bold; margin: 0; color: #28a745;">{{ total_stats.total_conversions|default:0|floatformat:0 }}</p>
+        </div>
+        <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h4 style="margin: 0 0 10px 0; color: #666;">総セッション数</h4>
+            <p style="font-size: 24px; font-weight: bold; margin: 0;">{{ total_stats.total_sessions|default:0|floatformat:0 }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if stats %}
+    <h3>バリアント別統計</h3>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        {% for variant, data in stats.items %}
+        <div style="background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h4 style="margin-top: 0;">{{ variant|upper|slice:"-1" }} バリアント</h4>
+            <table style="width: 100%;">
+                <tr>
+                    <td>ページビュー:</td>
+                    <td style="text-align: right;"><strong>{{ data.total_page_views|default:0|floatformat:0 }}</strong></td>
+                </tr>
+                <tr>
+                    <td>登録クリック:</td>
+                    <td style="text-align: right;"><strong>{{ data.total_register_clicks|default:0|floatformat:0 }}</strong></td>
+                </tr>
+                <tr>
+                    <td>ログインクリック:</td>
+                    <td style="text-align: right;"><strong>{{ data.total_login_clicks|default:0|floatformat:0 }}</strong></td>
+                </tr>
+                <tr>
+                    <td>コンバージョン:</td>
+                    <td style="text-align: right;"><strong style="color: #28a745;">{{ data.total_conversions|default:0|floatformat:0 }}</strong></td>
+                </tr>
+                <tr>
+                    <td>セッション数:</td>
+                    <td style="text-align: right;"><strong>{{ data.total_sessions|default:0|floatformat:0 }}</strong></td>
+                </tr>
+                <tr style="border-top: 1px solid #ddd; padding-top: 10px;">
+                    <td><strong>コンバージョン率:</strong></td>
+                    <td style="text-align: right;">
+                        <strong style="font-size: 18px; color: {% if data.conversion_rate >= 5 %}#28a745{% elif data.conversion_rate >= 2 %}#ffc107{% else %}#dc3545{% endif %};">
+                            {{ data.conversion_rate|floatformat:2 }}%
+                        </strong>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if recent_stats %}
+    <h3 style="margin-top: 20px;">直近7日間の統計</h3>
+    <div style="background: white; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <p>ページビュー: <strong>{{ recent_stats.recent_page_views|default:0|floatformat:0 }}</strong> |
+           コンバージョン: <strong style="color: #28a745;">{{ recent_stats.recent_conversions|default:0|floatformat:0 }}</strong> |
+           セッション: <strong>{{ recent_stats.recent_sessions|default:0|floatformat:0 }}</strong></p>
+    </div>
+    {% endif %}
+</div>
+
+{{ block.super }}
+{% endblock %}
