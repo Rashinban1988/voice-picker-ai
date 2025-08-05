@@ -161,4 +161,5 @@ urllib3==2.2.3
 vosk==0.3.44
 websockets==14.1
 webvtt-py==0.5.1
+whitenoise==6.8.2
 yarl==1.18.3
