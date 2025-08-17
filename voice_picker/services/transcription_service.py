@@ -181,9 +181,11 @@ def transcribe_and_save(file_path: str, uploaded_file_id, transcription_provider
                 processing_logger.error(f"音声ファイルの読み込みエラー: {e2}")
                 return False
 
-        # 既存のTranscriptionデータを削除
-        Transcription.objects.filter(uploaded_file=uploaded_file).delete()
-        processing_logger.info("既存の文字起こしデータを削除しました")
+        # 既存のTranscriptionデータを論理削除
+        transcriptions = Transcription.objects.filter(uploaded_file=uploaded_file, exist=True)
+        for transcription in transcriptions:
+            transcription.delete()  # モデルのdeleteメソッドを使用して論理削除
+        processing_logger.info("既存の文字起こしデータを論理削除しました")
 
         # LemonFoxの場合は話者分離機能付きなので、ファイル全体を処理
         if transcription_provider == 'lemonfox':

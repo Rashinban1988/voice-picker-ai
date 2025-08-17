@@ -21,6 +21,7 @@ def organization_upload_to(instance, filename):
 
     while UploadedFile.objects.filter(
         organization=instance.organization,
+        exist=True,
         file__endswith=f"/{filename}" if counter == 1 else f"/{name}_{counter}{ext}"
     ).exists():
         filename = f"{name}_{counter}{ext}"
@@ -107,7 +108,8 @@ def delete_old_file(sender, instance, **kwargs):
             if not old_file == new_file:
                 if old_file and os.path.isfile(old_file.path):
                     other_files_using_same_path = UploadedFile.objects.filter(
-                        file=old_file.name
+                        file=old_file.name,
+                        exist=True
                     ).exclude(pk=instance.pk).exists()
 
                     if not other_files_using_same_path:
@@ -119,7 +121,8 @@ def delete_file_on_delete(sender, instance, **kwargs):
     if instance.file:
         if os.path.isfile(instance.file.path):
             other_files_using_same_path = UploadedFile.objects.filter(
-                file=instance.file.name
+                file=instance.file.name,
+                exist=True
             ).exists()
 
             if not other_files_using_same_path:

@@ -209,7 +209,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         """組織のサブスクリプション情報を単一オブジェクトとして返す"""
         queryset = self.get_queryset()
         api_logger.info(f"Subscription list request for user {request.user.id}, organization {request.user.organization.id}")
-        
+
         if queryset.exists():
             instance = queryset.first()
             serializer = self.get_serializer(instance)
@@ -233,7 +233,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
             if not plan_id:
                 return Response(
-                    {'error': 'プランIDが必要です'}, 
+                    {'error': 'プランIDが必要です'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -241,7 +241,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
             except SubscriptionPlan.DoesNotExist:
                 return Response(
-                    {'error': '指定されたプランが見つかりません'}, 
+                    {'error': '指定されたプランが見つかりません'},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
@@ -268,29 +268,49 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 except StripeError as e:
                     api_logger.error(f"Failed to create Stripe customer: {e}")
                     return Response(
-                        {'error': '顧客情報の作成に失敗しました'}, 
+                        {'error': '顧客情報の作成に失敗しました'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
 
             success_url = f"{settings.NEXT_JS_HOST}/mypage?session_id={{CHECKOUT_SESSION_ID}}"
             cancel_url = f"{settings.NEXT_JS_HOST}/mypage"
 
+            # トライアル期間の設定（既に使用済みの場合は0日）
+            trial_days = 0 if subscription.has_used_trial else 30
+
             try:
-                checkout_session = stripe.checkout.Session.create(
-                    customer=subscription.stripe_customer_id,
-                    payment_method_types=['card'],
-                    line_items=[{
+                # チェックアウトセッションの基本設定
+                session_params = {
+                    'customer': subscription.stripe_customer_id,
+                    'payment_method_types': ['card'],
+                    'line_items': [{
                         'price': plan.stripe_price_id,
                         'quantity': 1,
                     }],
-                    mode='subscription',
-                    success_url=success_url,
-                    cancel_url=cancel_url,
-                    metadata={
+                    'mode': 'subscription',
+                    'success_url': success_url,
+                    'cancel_url': cancel_url,
+                    'metadata': {
                         'organization_id': str(organization.id),
                         'plan_id': str(plan.id)
                     }
-                )
+                }
+
+                # トライアルが利用可能な場合のみ追加
+                if trial_days > 0:
+                    session_params['subscription_data'] = {
+                        'trial_period_days': trial_days,
+                        'trial_settings': {
+                            'end_behavior': {
+                                'missing_payment_method': 'cancel'
+                            }
+                        }
+                    }
+                    api_logger.info(f"Creating checkout session with {trial_days} day trial for organization {organization.id}")
+                else:
+                    api_logger.info(f"Creating checkout session without trial (already used) for organization {organization.id}")
+
+                checkout_session = stripe.checkout.Session.create(**session_params)
                 api_logger.info(f"Created checkout session {checkout_session.id} for organization {organization.id}")
                 return Response({'checkout_url': checkout_session.url})
 
@@ -298,24 +318,24 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
                 api_logger.error(f"Failed to create checkout session: {e}")
                 if isinstance(e, CardError):
                     return Response(
-                        {'error': 'カード情報に問題があります'}, 
+                        {'error': 'カード情報に問題があります'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 elif isinstance(e, InvalidRequestError):
                     return Response(
-                        {'error': '無効なリクエストです'}, 
+                        {'error': '無効なリクエストです'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 else:
                     return Response(
-                        {'error': 'チェックアウトセッションの作成に失敗しました'}, 
+                        {'error': 'チェックアウトセッションの作成に失敗しました'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
 
         except Exception as e:
             api_logger.error(f"Unexpected error in create_checkout_session: {e}")
             return Response(
-                {'error': 'システムエラーが発生しました'}, 
+                {'error': 'システムエラーが発生しました'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -353,14 +373,14 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             except StripeError as e:
                 api_logger.error(f"Failed to create portal session: {e}")
                 return Response(
-                    {'error': 'ポータルセッションの作成に失敗しました'}, 
+                    {'error': 'ポータルセッションの作成に失敗しました'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
         except Exception as e:
             api_logger.error(f"Unexpected error in manage_portal: {e}")
             return Response(
-                {'error': 'システムエラーが発生しました'}, 
+                {'error': 'システムエラーが発生しました'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -397,7 +417,7 @@ class StripeWebhookView(View):
         try:
             api_logger.info(f"Processing webhook event: {event['type']}")
             api_logger.debug(f"Webhook event data: {event['data']}")
-            
+
             if event['type'] == 'checkout.session.completed':
                 session = event['data']['object']
                 api_logger.info(f"Processing checkout.session.completed for session {session.get('id')}")
@@ -433,10 +453,10 @@ def fulfill_subscription(session):
     """チェックアウト完了時の処理"""
     api_logger.info(f"Starting fulfill_subscription for session {session.get('id')}")
     api_logger.debug(f"Session data: {session}")
-    
+
     org_id = session.get('metadata', {}).get('organization_id')
     plan_id = session.get('metadata', {}).get('plan_id')
-    
+
     api_logger.info(f"Organization ID: {org_id}, Plan ID: {plan_id}")
 
     try:
@@ -524,6 +544,10 @@ def update_subscription(stripe_subscription):
             subscription.status = Subscription.Status.CANCELED
         elif stripe_subscription['status'] == 'trialing':
             subscription.status = Subscription.Status.TRIAL
+            # トライアル開始時にフラグを更新
+            if not subscription.has_used_trial:
+                subscription.has_used_trial = True
+                api_logger.info(f"Trial started for subscription {subscription.id}, marking has_used_trial=True")
         else:
             subscription.status = Subscription.Status.INACTIVE
 

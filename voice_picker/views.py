@@ -179,7 +179,7 @@ class EnvironmentViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class UploadedFileViewSet(viewsets.ModelViewSet):
-    queryset = UploadedFile.objects.all()
+    queryset = UploadedFile.objects.filter(exist=True)
     serializer_class = UploadedFileSerializer
     parser_classes = (MultiPartParser, FormParser,)  # ファイルアップロードを許可するパーサーを追加
     permission_classes = [IsAuthenticated] # 認証を要求
@@ -193,7 +193,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             api_logger.error("organization_idがない")
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = UploadedFile.objects.all()
+        queryset = UploadedFile.objects.filter(exist=True)
         queryset = queryset.filter(organization=organization) # 組織に紐づいたUploadedFileを取得
         queryset = queryset.order_by('-created_at') # 作成日時の降順で取得
 
@@ -474,7 +474,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
             api_logger.error("organization_idがない")
             return Response({"detail": "不正なリクエストです"}, status=status.HTTP_400_BAD_REQUEST)
 
-        queryset = UploadedFile.objects.filter(organization=organization)
+        queryset = UploadedFile.objects.filter(organization=organization, exist=True)
         # UUIDフィールドに対応するため、pkを直接使用
         queryset = queryset.filter(id=kwargs['pk'])
 
@@ -648,7 +648,7 @@ class UploadedFileViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class TranscriptionViewSet(viewsets.ModelViewSet):
-    queryset = Transcription.objects.all()
+    queryset = Transcription.objects.filter(exist=True)
     serializer_class = TranscriptionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -657,7 +657,7 @@ class TranscriptionViewSet(viewsets.ModelViewSet):
         uploadedfileのIDに基づいてtranscriptionのクエリセットをフィルタリングする。
         """
         api_logger.info(f"TranscriptionViewSet get_queryset request: {self.kwargs}")
-        queryset = super().get_queryset().order_by('created_at')
+        queryset = super().get_queryset().filter(exist=True).order_by('created_at')
         # URLからuploadedfileのIDを取得するためのキーを修正する
         uploadedfile_id = self.kwargs.get('uploadedfile_id')
         if uploadedfile_id is not None:

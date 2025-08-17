@@ -79,6 +79,10 @@ class Subscription(models.Model):
         default=False, 
         verbose_name='期間終了時に解約'
     )
+    has_used_trial = models.BooleanField(
+        default=False,
+        verbose_name='トライアル使用済み'
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新日時')
 
