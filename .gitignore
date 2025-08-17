@@ -5,9 +5,6 @@ __pycache__/
 # 環境変数ファイル
 .env
 
-# マイグレーションファイル
-*/migrations/*
-
 # IDEの設定ファイル
 .vscode/
 .idea/
