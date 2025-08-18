@@ -31,8 +31,10 @@ class CampaignStatsView(View):
 
         html_content = f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="ja">
         <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>キャンペーン統計</title>
             <style>
                 body {{
@@ -194,4 +196,4 @@ class CampaignStatsView(View):
         </html>
         """
 
-        return HttpResponse(html_content, content_type='text/html')
+        return HttpResponse(html_content, content_type='text/html; charset=utf-8')
