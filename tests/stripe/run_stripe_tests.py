@@ -15,19 +15,19 @@ django.setup()
 def run_stripe_tests():
     """Stripe関連のテストを実行"""
     from django.test.utils import get_runner
-    
+
     # テストランナーを取得
     TestRunner = get_runner(settings)
     test_runner = TestRunner()
-    
+
     # Stripe関連のテストのみを実行
     test_labels = [
         'member_management.tests.test_stripe',
     ]
-    
+
     # テストを実行
     failures = test_runner.run_tests(test_labels)
-    
+
     if failures:
         print(f"\n❌ {failures} 個のテストが失敗しました")
         sys.exit(1)
@@ -36,4 +36,4 @@ def run_stripe_tests():
 
 if __name__ == '__main__':
     print("🧪 Stripeサブスクリプション機能のテストを開始します...")
-    run_stripe_tests() 
+    run_stripe_tests()

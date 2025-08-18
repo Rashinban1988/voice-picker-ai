@@ -9,6 +9,12 @@ class UserCreateData(BaseModel):
     password: str = Field(..., title="パスワード")
     phone_number: str = Field(..., title="電話番号")
 
+    # キャンペーントラッキング用フィールド（オプション）
+    utm_source: str | None = Field(None, title="UTMソース")
+    utm_medium: str | None = Field(None, title="UTMメディウム")
+    utm_campaign: str | None = Field(None, title="UTMキャンペーン")
+    campaign_session_id: str | None = Field(None, title="キャンペーンセッションID")
+
     @field_validator('email')
     def validate_email(cls, v):
         if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', v):

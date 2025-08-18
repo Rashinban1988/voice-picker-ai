@@ -8,6 +8,7 @@ from .views import (
     RegisterView, UserViewSet, EmailVerificationView,
     SubscriptionPlanViewSet, SubscriptionViewSet, StripeWebhookView, TwoFactorVerifyView
 )
+from .api_views import TrackCampaignView, CampaignStatsAPIView
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet, basename='users')
@@ -31,6 +32,10 @@ urlpatterns = [
          csrf_exempt(SubscriptionViewSet.as_view({'post': 'manage_portal'})),
          name='manage_portal'),
     path('webhook/stripe/', csrf_exempt(StripeWebhookView.as_view()), name='stripe_webhook'),
+
+    # キャンペーントラッキング用API
+    path('campaign/track/', csrf_exempt(TrackCampaignView.as_view()), name='track_campaign'),
+    path('campaign/stats/', csrf_exempt(CampaignStatsAPIView.as_view()), name='campaign_stats'),
 ]
 
 urlpatterns += router.urls

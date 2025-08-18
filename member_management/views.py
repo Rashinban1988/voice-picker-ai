@@ -22,7 +22,7 @@ from .serializers import (
     SubscriptionPlanSerializer,
     SubscriptionSerializer
 )
-from .models import User, Organization, SubscriptionPlan, Subscription
+from .models import User, Organization, SubscriptionPlan, Subscription, CampaignTracking
 from .schemas import UserCreateData, OrganizationCreateData
 # Standard library
 import json
@@ -48,6 +48,42 @@ class RegisterView(View):
                 organization = OrganizationService.create_organization(organization_data)
                 user_service = UserService(organization)
                 user = user_service.create_user(user_data, is_register_view=True)
+
+                # キャンペーントラッキングの更新
+                # 1. フロントエンドから送信されたセッションIDを優先
+                campaign_session_id = user_data.campaign_session_id or request.session.get('campaign_session_id')
+                if campaign_session_id:
+                    try:
+                        tracking = CampaignTracking.objects.filter(
+                            session_id=campaign_session_id,
+                            registered_user__isnull=True
+                        ).first()
+                        if tracking:
+                            tracking.registered_user = user
+                            tracking.registered_at = timezone.now()
+                            tracking.save()
+                            api_logger.info(f"Campaign tracking updated for user {user.id}, source: {tracking.source}")
+                        else:
+                            # フロントエンドからUTMデータが送信されている場合は新規作成
+                            if user_data.utm_source:
+                                source_map = {
+                                    'flyer': CampaignTracking.Source.FLYER,
+                                    'web': CampaignTracking.Source.WEB,
+                                    'social': CampaignTracking.Source.SOCIAL,
+                                    'other': CampaignTracking.Source.OTHER,
+                                }
+                                source = source_map.get(user_data.utm_source, CampaignTracking.Source.OTHER)
+
+                                CampaignTracking.objects.create(
+                                    source=source,
+                                    session_id=campaign_session_id,
+                                    registered_user=user,
+                                    registered_at=timezone.now(),
+                                    accessed_at=timezone.now()
+                                )
+                                api_logger.info(f"New campaign tracking created for user {user.id}, source: {user_data.utm_source}")
+                    except Exception as e:
+                        api_logger.error(f"Failed to update campaign tracking: {e}")
 
                 try:
                     UserService.send_verification_email(user)
