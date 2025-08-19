@@ -5,7 +5,7 @@
     {% load sass_tags %}
     {% tailwind_css %}
     <title>{% block title %}デフォルトタイトル{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'scss/styles.css' %}" rel="stylesheet" type="text/css">
+    <link rel="stylesheet" href="{% sass_src 'scss/styles.scss' %}" type="text/css">
     <!-- 開発用CDN -->
     <!-- <script src="https://cdn.tailwindcss.com"></script> -->
     {% block extra_head %}{% endblock %}
