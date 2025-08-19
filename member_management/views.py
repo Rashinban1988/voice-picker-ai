@@ -285,7 +285,10 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
 
             subscription, created = Subscription.objects.get_or_create(
                 organization=organization,
-                defaults={'status': Subscription.Status.INACTIVE}
+                defaults={
+                    'status': Subscription.Status.INACTIVE,
+                    'has_used_trial': True  # 安全のため新規作成時はトライアル済みとする
+                }
             )
 
             if not subscription.stripe_customer_id:
