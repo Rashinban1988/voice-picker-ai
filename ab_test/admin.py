@@ -154,9 +154,10 @@ class ABTestSummaryAdmin(admin.ModelAdmin):
         """コンバージョン率の表示"""
         rate = obj.conversion_rate * 100
         color = 'green' if rate >= 5 else 'orange' if rate >= 2 else 'red'
+        rate_text = f"{rate:.2f}%"
         return format_html(
-            '<span style="color: {}; font-weight: bold;">{:.2f}%</span>',
-            color, rate
+            '<span style="color: {}; font-weight: bold;">{}</span>',
+            color, rate_text
         )
     conversion_rate_display.short_description = 'Conversion Rate'
 

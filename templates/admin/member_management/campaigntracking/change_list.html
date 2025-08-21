@@ -1,0 +1,191 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .campaign-stats {
+        background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat-box {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .stat-label {
+        color: #666;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .stat-percent {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+
+    .percent-high {
+        background: #4CAF50;
+        color: white;
+    }
+
+    .percent-medium {
+        background: #FF9800;
+        color: white;
+    }
+
+    .percent-low {
+        background: #f44336;
+        color: white;
+    }
+
+    .source-stats {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .source-stats h3 {
+        margin-top: 0;
+        color: #333;
+    }
+
+    .source-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .source-table th,
+    .source-table td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .source-table th {
+        background: #f5f5f5;
+        font-weight: bold;
+        color: #666;
+    }
+
+    .source-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 12px;
+    }
+
+    .badge-flyer { background: #FF6B6B; color: white; }
+    .badge-web { background: #4ECDC4; color: white; }
+    .badge-social { background: #45B7D1; color: white; }
+    .badge-other { background: #95A5A6; color: white; }
+</style>
+{% endblock %}
+
+{% block content_title %}
+<h1>キャンペーントラッキング</h1>
+{% endblock %}
+
+{% block result_list %}
+<!-- 統計ダッシュボード -->
+<div class="campaign-stats">
+    <h2 style="margin-top: 0;">📊 キャンペーン統計</h2>
+
+    <div class="stats-grid">
+        <div class="stat-box">
+            <div class="stat-label">総アクセス数</div>
+            <div class="stat-value">{{ total|default:"0" }}</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">登録完了数</div>
+            <div class="stat-value">
+                {{ registered|default:"0" }}
+                {% if conversion_rate %}
+                <span class="stat-percent {% if conversion_rate >= 10 %}percent-high{% elif conversion_rate >= 5 %}percent-medium{% else %}percent-low{% endif %}">
+                    {{ conversion_rate|floatformat:1 }}%
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">直近7日間のアクセス</div>
+            <div class="stat-value">{{ recent_total|default:"0" }}</div>
+        </div>
+
+        <div class="stat-box">
+            <div class="stat-label">直近7日間の登録</div>
+            <div class="stat-value">
+                {{ recent_registered|default:"0" }}
+                {% if recent_rate %}
+                <span class="stat-percent {% if recent_rate >= 10 %}percent-high{% elif recent_rate >= 5 %}percent-medium{% else %}percent-low{% endif %}">
+                    {{ recent_rate|floatformat:1 }}%
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if source_stats %}
+    <div class="source-stats">
+        <h3>流入元別統計</h3>
+        <table class="source-table">
+            <thead>
+                <tr>
+                    <th>流入元</th>
+                    <th>アクセス数</th>
+                    <th>登録数</th>
+                    <th>コンバージョン率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in source_stats %}
+                <tr>
+                    <td>
+                        <span class="source-badge badge-{{ stat.label|lower|slice:":5" }}">
+                            {{ stat.label }}
+                        </span>
+                    </td>
+                    <td>{{ stat.total }}</td>
+                    <td>{{ stat.registered }}</td>
+                    <td>
+                        <strong class="{% if stat.rate >= 10 %}percent-high{% elif stat.rate >= 5 %}percent-medium{% else %}percent-low{% endif %}">
+                            {{ stat.rate|floatformat:1 }}%
+                        </strong>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<!-- デフォルトのリスト表示 -->
+{{ block.super }}
+{% endblock %}
