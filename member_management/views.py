@@ -87,6 +87,8 @@ class RegisterView(View):
 
                 try:
                     UserService.send_verification_email(user)
+                    # 管理者に新規会員登録の通知を送信
+                    UserService.send_admin_notification_email(user)
                 except Exception as e:
                     api_logger.error(f"User registration email sending failed: {e}")
                     raise

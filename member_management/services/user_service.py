@@ -22,6 +22,7 @@ class UserService:
     LOCK_DURATION_MINUTES = 30
     EMAIL_SUBJECT_VERIFICATION = '【Voice Picker AI】メールアドレス確認のお願い'
     EMAIL_SUBJECT_2FA = '【Voice Picker AI】認証コードのご案内'
+    EMAIL_SUBJECT_ADMIN_NOTIFICATION = '【Voice Picker AI】新規会員登録のお知らせ'
 
     def __init__(self, organization):
         self.organization = organization
@@ -177,3 +178,42 @@ class UserService:
         else:  # SMS
             # SMS送信の実装（Twilio等のサービスを使用）
             api_logger.info(f"Two-factor code sent via SMS to {user.phone_number}")
+
+    @staticmethod
+    def send_admin_notification_email(user: User) -> None:
+        """管理者に新規会員登録の通知メールを送信する（複数アドレス対応）
+
+        Args:
+            user (User): 登録されたユーザー
+        """
+        try:
+            # ユーザーの組織情報を取得
+            organization = user.organization
+
+            message = (
+                f'Voice Picker AIに新しい会員が登録されました。\n\n'
+                f'【登録情報】\n'
+                f'登録日時: {user.created_at.strftime("%Y年%m月%d日 %H時%M分")}\n'
+                f'組織名: {organization.name}\n'
+                f'会員名: {user.last_name} {user.first_name}\n'
+                f'Voice Picker AI 運営事務局'
+            )
+
+            # 複数の管理者メールアドレスに送信
+            admin_emails = settings.ADMIN_NOTIFICATION_EMAILS
+            if admin_emails:
+                send_mail(
+                    subject=UserService.EMAIL_SUBJECT_ADMIN_NOTIFICATION,
+                    message=message,
+                    from_email=config("EMAIL_HOST_FROM"),
+                    recipient_list=admin_emails,
+                    fail_silently=False,
+                )
+
+                api_logger.info(f"Admin notification email sent to {len(admin_emails)} addresses for new user registration: {user.email}")
+            else:
+                api_logger.warning("No admin notification emails configured")
+
+        except Exception as e:
+            # 管理者通知の失敗は会員登録処理を妨げないようにログ出力のみ
+            api_logger.error(f"Failed to send admin notification email for user {user.email}: {e}")

@@ -293,6 +293,10 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 
+# 管理者通知メール設定（カンマ区切りで複数指定可能）
+admin_emails = config('ADMIN_NOTIFICATION_EMAILS', default='admin@voice-picker-ai.com')
+ADMIN_NOTIFICATION_EMAILS = [email.strip() for email in admin_emails.split(',') if email.strip()]
+
 # voice-pickerファイルアップロード設定-----------------------------------------------------------------------
 MEDIA_URL = ''
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
