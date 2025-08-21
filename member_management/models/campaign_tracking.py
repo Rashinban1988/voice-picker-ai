@@ -10,6 +10,8 @@ class CampaignTracking(models.Model):
         FLYER = 'flyer', 'チラシ'
         WEB = 'web', 'Webサイト'
         SOCIAL = 'social', 'SNS'
+        FRIEND = 'friend', '友人・知人の紹介'
+        NEWS = 'news', 'ニュース・記事'
         OTHER = 'other', 'その他'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -55,6 +57,11 @@ class CampaignTracking(models.Model):
         null=True,
         blank=True,
         verbose_name='登録日時'
+    )
+    is_manual_referral = models.BooleanField(
+        default=False,
+        verbose_name='手動設定',
+        help_text='ユーザーが手動で流入元を選択した場合はTrue'
     )
 
     class Meta:

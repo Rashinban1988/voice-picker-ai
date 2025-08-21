@@ -14,6 +14,7 @@ class UserCreateData(BaseModel):
     utm_medium: str | None = Field(None, title="UTMメディウム")
     utm_campaign: str | None = Field(None, title="UTMキャンペーン")
     campaign_session_id: str | None = Field(None, title="キャンペーンセッションID")
+    manual_referral: bool | None = Field(None, title="手動流入元設定フラグ")
 
     @field_validator('email')
     def validate_email(cls, v):
