@@ -28,6 +28,8 @@ class UserCreateData(BaseModel):
     def validate_phone_number(cls, v):
         if not re.match(r'^[0-9]{10,11}$', v):
             raise ValueError('無効な電話番号です')
+        if User.objects.filter(phone_number=v).exists():
+            raise ValueError('電話番号が既に存在します')
         return v
 
     @field_validator('password')

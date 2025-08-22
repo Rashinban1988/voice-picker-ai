@@ -7,6 +7,7 @@ from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.conf import settings
 from django.core.cache import cache
+from pydantic import ValidationError
 # Django REST Framework
 from rest_framework import status, viewsets
 from rest_framework.response import Response
@@ -101,12 +102,78 @@ class RegisterView(View):
             api_logger.info(f"User registration successful: {user.id}")
             return JsonResponse({'message': 'メール認証リンクを送信しました。'}, status=status.HTTP_201_CREATED)
 
+        except ValidationError as e:
+            # Pydanticの複数バリデーションエラーを処理
+            api_logger.error(f"User registration validation error: {e}")
+            errors = {}
+            for error in e.errors():
+                field = error['loc'][0] if error['loc'] else 'unknown'
+                # エラーメッセージから具体的な内容を抽出
+                error_msg = str(error.get('msg', ''))
+                if 'メールアドレスが既に存在します' in error_msg:
+                    errors[field] = 'メールアドレスが既に存在します'
+                elif '電話番号が既に存在します' in error_msg:
+                    errors[field] = '電話番号が既に存在します'
+                elif '無効なメールアドレスです' in error_msg:
+                    errors[field] = '無効なメールアドレスです'
+                elif '無効な電話番号です' in error_msg:
+                    errors[field] = '無効な電話番号です'
+                elif 'パスワードは8文字以上である必要があります' in error_msg:
+                    errors[field] = 'パスワードは8文字以上である必要があります'
+                else:
+                    errors[field] = error_msg
+
+            return JsonResponse({
+                'message': '入力内容に誤りがあります',
+                'errors': errors,
+                'error_type': 'validation'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         except ValueError as e:
             api_logger.error(f"User registration validation error: {e}")
-            return JsonResponse({'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            error_msg = str(e)
+            # エラーの種類を判別してフィールド情報を追加
+            if 'メールアドレスが既に存在します' in error_msg:
+                return JsonResponse({
+                    'message': error_msg,
+                    'field': 'email',
+                    'error_type': 'duplicate'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif '電話番号が既に存在します' in error_msg:
+                return JsonResponse({
+                    'message': error_msg,
+                    'field': 'phone_number',
+                    'error_type': 'duplicate'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif '無効なメールアドレスです' in error_msg:
+                return JsonResponse({
+                    'message': error_msg,
+                    'field': 'email',
+                    'error_type': 'invalid'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif '無効な電話番号です' in error_msg:
+                return JsonResponse({
+                    'message': error_msg,
+                    'field': 'phone_number',
+                    'error_type': 'invalid'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            elif 'パスワードは8文字以上である必要があります' in error_msg:
+                return JsonResponse({
+                    'message': error_msg,
+                    'field': 'password',
+                    'error_type': 'invalid'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return JsonResponse({
+                    'message': error_msg,
+                    'error_type': 'validation'
+                }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             api_logger.error(f"User registration failed: {e}")
-            return JsonResponse({'message': 'ユーザーが作成できませんでした'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return JsonResponse({
+                'message': 'ユーザーが作成できませんでした',
+                'error_type': 'server'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class OrganizationViewSet(viewsets.ModelViewSet):
     queryset = Organization.objects.all()
