@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.cache import cache
 from pydantic import ValidationError
 # Django REST Framework
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.views import APIView
@@ -207,6 +207,30 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             api_logger.error(f"User registration email sending failed: {e}")
             raise
+
+    def perform_update(self, serializer):
+        # 編集時の重複チェック除外のため、編集対象ユーザーのIDを渡す
+        user_id = self.get_object().id
+        validated_data = serializer.validated_data.copy()
+        errors = {}
+
+        # メールアドレスの重複チェック（自分以外）
+        if 'email' in validated_data:
+            email = validated_data['email']
+            if User.objects.filter(email=email).exclude(id=user_id).exists():
+                errors['email'] = 'メールアドレスが既に存在します'
+
+        # 電話番号の重複チェック（自分以外）
+        if 'phone_number' in validated_data:
+            phone_number = validated_data['phone_number']
+            if User.objects.filter(phone_number=phone_number).exclude(id=user_id).exists():
+                errors['phone_number'] = '電話番号が既に存在します'
+
+        if errors:
+            # DRFのValidationErrorに直接渡す
+            raise serializers.ValidationError(errors)
+
+        serializer.save()
 
     @action(detail=False, methods=['get'])
     def me(self, request):
