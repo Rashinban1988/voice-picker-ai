@@ -5,6 +5,7 @@ from django.utils.html import format_html
 from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
+from django.urls import path
 from .models.organization import Organization
 from .models.user import User
 from .models.subscription import Subscription, SubscriptionPlan
@@ -171,12 +172,26 @@ class CustomAdminSite(admin.AdminSite):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
+    def get_urls(self):
+        """カスタムURLを追加"""
+        urls = super().get_urls()
+        from voice_picker.admin_views import prompt_analytics_view
+        custom_urls = [
+            path('prompt-analytics/', self.admin_view(prompt_analytics_view), name='prompt-analytics'),
+        ]
+        return custom_urls + urls
+
     def index(self, request, extra_context=None):
         """管理サイトのインデックスページをカスタマイズ"""
         extra_context = extra_context or {}
 
         # 分析ダッシュボードへのリンク情報を追加
         extra_context['custom_links'] = [
+            {
+                'title': '📊 プロンプト分析',
+                'url': '/admin/prompt-analytics/',
+                'description': '再生成プロンプトの利用状況を週次で分析'
+            },
             {
                 'title': '📊 キャンペーン分析',
                 'url': '/admin/member_management/campaigntracking/',

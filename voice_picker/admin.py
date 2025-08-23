@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.urls import path, reverse
+from django.utils.html import format_html
 from .models import UploadedFile, Transcription, PromptHistory
 
 class UploadedFileAdmin(admin.ModelAdmin):
@@ -23,9 +25,18 @@ class PromptHistoryAdmin(admin.ModelAdmin):
     search_fields = ['custom_instruction', 'generated_result', 'instruction_keywords']
     readonly_fields = ['week_of_year', 'year', 'instruction_keywords', 'instruction_category']
 
+    change_list_template = 'admin/voice_picker/prompthistory/change_list.html'
+
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('organization', 'uploaded_file')
 
+    def changelist_view(self, request, extra_context=None):
+        # 分析ダッシュボードへのリンクを追加
+        extra_context = extra_context or {}
+        extra_context['show_analytics_link'] = True
+        return super().changelist_view(request, extra_context=extra_context)
+
+# 既存の登録を標準管理サイトに追加
 admin.site.register(UploadedFile, UploadedFileAdmin)
 admin.site.register(Transcription, TranscriptionAdmin)
 admin.site.register(PromptHistory, PromptHistoryAdmin)
