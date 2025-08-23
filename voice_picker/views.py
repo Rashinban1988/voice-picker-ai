@@ -10,7 +10,10 @@ import webvtt
 import uuid
 import random
 from typing import Optional
-from moviepy.editor import VideoFileClip
+try:
+    from moviepy.editor import VideoFileClip
+except ImportError:
+    VideoFileClip = None
 # import wave
 
 import numpy as np
@@ -21,7 +24,10 @@ from django.db import transaction
 from django.http import JsonResponse, HttpResponse, FileResponse
 from django.views import View
 from dotenv import load_dotenv
-from pydub import AudioSegment
+try:
+    from pydub import AudioSegment
+except ImportError:
+    AudioSegment = None
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -36,7 +42,7 @@ from urllib.parse import unquote
 from vosk import KaldiRecognizer, Model
 import torch
 import whisper
-from .models import Transcription, UploadedFile, Environment, ScheduledRecording
+from .models import Transcription, UploadedFile, Environment, ScheduledRecording, PromptHistory
 from .serializers import TranscriptionSerializer, UploadedFileSerializer, EnvironmentSerializer
 from .services.zoom_bot_service import ZoomBotService
 from .services.zoom_api_service import ZoomAPIService
@@ -1604,6 +1610,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             uploaded_file.summarization_generation_count += 1
             uploaded_file.save()
 
+            # プロンプト履歴を記録
+            PromptHistory.objects.create(
+                organization=organization,
+                uploaded_file=uploaded_file,
+                prompt_type=PromptHistory.PromptType.SUMMARY,
+                custom_instruction=instruction,
+                generated_result=summary_text
+            )
+
             remaining_generations = 5 - uploaded_file.summarization_generation_count
 
             return Response({
@@ -1672,6 +1687,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             uploaded_file.issue = issue_text
             uploaded_file.issue_generation_count += 1
             uploaded_file.save()
+
+            # プロンプト履歴を記録
+            PromptHistory.objects.create(
+                organization=organization,
+                uploaded_file=uploaded_file,
+                prompt_type=PromptHistory.PromptType.ISSUES,
+                custom_instruction=instruction,
+                generated_result=issue_text
+            )
 
             remaining_generations = 5 - uploaded_file.issue_generation_count
 
@@ -1742,6 +1766,15 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             uploaded_file.solution_generation_count += 1
             uploaded_file.save()
 
+            # プロンプト履歴を記録
+            PromptHistory.objects.create(
+                organization=organization,
+                uploaded_file=uploaded_file,
+                prompt_type=PromptHistory.PromptType.SOLUTIONS,
+                custom_instruction=instruction,
+                generated_result=solution_text
+            )
+
             remaining_generations = 5 - uploaded_file.solution_generation_count
 
             return Response({
@@ -1756,6 +1789,110 @@ class RegenerateAnalysisViewSet(viewsets.ViewSet):
             processing_logger.error(f"取り組み案再生成中にエラーが発生しました: {e}")
             return Response(
                 {"error": "取り組み案の再生成に失敗しました"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='prompt-analytics')
+    def get_prompt_analytics(self, request):
+        """プロンプト分析データを取得"""
+        try:
+            user = request.user
+            organization = user.organization
+
+            # クエリパラメータから期間を取得
+            year = request.query_params.get('year')
+            week = request.query_params.get('week')
+
+            if not year or not week:
+                # デフォルトは現在の週
+                from datetime import datetime
+                now = datetime.now()
+                year = now.year
+                week = now.isocalendar()[1]
+            else:
+                year = int(year)
+                week = int(week)
+
+            # 指定された週のプロンプト履歴を取得
+            prompt_histories = PromptHistory.get_weekly_analysis_data(organization, year, week)
+
+            # 分析データを集計
+            analytics_data = {
+                'period': {
+                    'year': year,
+                    'week': week
+                },
+                'total_regenerations': prompt_histories.count(),
+                'by_type': {},
+                'by_category': {},
+                'popular_keywords': [],
+                'recent_prompts': []
+            }
+
+            # プロンプトタイプ別の集計
+            for prompt_type in ['summary', 'issues', 'solutions']:
+                type_count = prompt_histories.filter(prompt_type=prompt_type).count()
+                analytics_data['by_type'][prompt_type] = type_count
+
+            # カテゴリ別の集計
+            categories = prompt_histories.exclude(
+                instruction_category__isnull=True
+            ).exclude(
+                instruction_category=''
+            ).values_list('instruction_category', flat=True)
+
+            category_counts = {}
+            for category in categories:
+                if category in category_counts:
+                    category_counts[category] += 1
+                else:
+                    category_counts[category] = 1
+
+            analytics_data['by_category'] = category_counts
+
+            # キーワード分析
+            all_keywords = []
+            for history in prompt_histories.exclude(instruction_keywords=[]):
+                all_keywords.extend(history.instruction_keywords)
+
+            keyword_counts = {}
+            for keyword in all_keywords:
+                if keyword in keyword_counts:
+                    keyword_counts[keyword] += 1
+                else:
+                    keyword_counts[keyword] = 1
+
+            # 人気キーワードトップ10
+            popular_keywords = sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            analytics_data['popular_keywords'] = [
+                {'keyword': keyword, 'count': count}
+                for keyword, count in popular_keywords
+            ]
+
+            # 最近のプロンプト（カスタム指示があるもの）
+            recent_prompts = prompt_histories.exclude(
+                custom_instruction__isnull=True
+            ).exclude(
+                custom_instruction=''
+            ).order_by('-created_at')[:10]
+
+            analytics_data['recent_prompts'] = [
+                {
+                    'prompt_type': history.get_prompt_type_display(),
+                    'custom_instruction': history.custom_instruction,
+                    'category': history.instruction_category,
+                    'created_at': history.created_at,
+                    'file_name': history.uploaded_file.file.name.split('/')[-1]
+                }
+                for history in recent_prompts
+            ]
+
+            return Response(analytics_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            processing_logger.error(f"プロンプト分析データ取得中にエラーが発生しました: {e}")
+            return Response(
+                {"error": "プロンプト分析データの取得に失敗しました"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

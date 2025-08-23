@@ -47,6 +47,10 @@ urlpatterns = [
         'post': 'regenerate_solutions'
     })), name='regenerate-solutions'),
     
+    path('api/regenerate/prompt-analytics/', csrf_exempt(RegenerateAnalysisViewSet.as_view({
+        'get': 'get_prompt_analytics'
+    })), name='prompt-analytics'),
+    
     # Zoom会議録画用API
     path('api/zoom/validate-url/', csrf_exempt(validate_zoom_meeting_url), name='validate-zoom-url'),
     path('api/zoom/start-recording/', csrf_exempt(start_zoom_recording), name='start-zoom-recording'),
