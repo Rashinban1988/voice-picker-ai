@@ -37,10 +37,40 @@ def prompt_analytics_view(request):
         except Organization.DoesNotExist:
             pass
 
+    # 年と週のリストを生成
+    current_year = datetime.now().year
+    years = list(range(2024, current_year + 2))  # 2024年から来年まで
+    simple_weeks = list(range(1, 53))  # シンプルな週リスト
+
+    # 週選択肢を詳細表示で生成
+    week_choices = []
+    for w in range(1, 53):
+        # ISO週から日付を計算
+        from datetime import date
+        try:
+            # その年の第w週の月曜日を取得
+            monday = date.fromisocalendar(year, w, 1)
+            sunday = date.fromisocalendar(year, w, 7)
+            month_info = f"{monday.month}月"
+            date_range = f"{monday.day}日〜{sunday.day}日"
+            week_choices.append({
+                'week': w,
+                'label': f"第{w}週（{month_info} {date_range}）"
+            })
+        except ValueError:
+            # 存在しない週の場合（年末など）
+            week_choices.append({
+                'week': w,
+                'label': f"第{w}週"
+            })
+
     # 統計データの集計
     context = {
         'year': year,
         'week': week,
+        'years': years,
+        'simple_weeks': simple_weeks,
+        'week_choices': week_choices,
         'selected_organization': selected_organization,
         'organizations': Organization.objects.all(),
         'total_regenerations': queryset.count(),
@@ -135,7 +165,7 @@ def prompt_analytics_view(request):
     context['hour_stats'] = hour_stats
 
     # ナビゲーション用の週リスト
-    weeks = []
+    navigation_weeks = []
     for i in range(-4, 5):
         nav_week = week + i
         nav_year = year
@@ -147,13 +177,28 @@ def prompt_analytics_view(request):
             nav_year += 1
             nav_week = nav_week - 52
 
-        weeks.append({
-            'year': nav_year,
-            'week': nav_week,
-            'label': f'{nav_year}年 第{nav_week}週',
-            'is_current': (nav_year == year and nav_week == week)
-        })
+        # ナビゲーション週の日付範囲を計算
+        from datetime import date
+        try:
+            monday = date.fromisocalendar(nav_year, nav_week, 1)
+            sunday = date.fromisocalendar(nav_year, nav_week, 7)
+            date_range = f"{monday.month}/{monday.day}〜{sunday.month}/{sunday.day}"
+            navigation_weeks.append({
+                'year': nav_year,
+                'week': nav_week,
+                'label': f'{nav_year}年 第{nav_week}週',
+                'date_range': date_range,
+                'is_current': (nav_year == year and nav_week == week)
+            })
+        except ValueError:
+            navigation_weeks.append({
+                'year': nav_year,
+                'week': nav_week,
+                'label': f'{nav_year}年 第{nav_week}週',
+                'date_range': '',
+                'is_current': (nav_year == year and nav_week == week)
+            })
 
-    context['weeks'] = weeks
+    context['navigation_weeks'] = navigation_weeks
 
     return render(request, 'admin/voice_picker/prompt_analytics.html', context)
