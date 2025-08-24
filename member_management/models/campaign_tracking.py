@@ -64,6 +64,22 @@ class CampaignTracking(models.Model):
         help_text='ユーザーが手動で流入元を選択した場合はTrue'
     )
 
+    # SNS詳細情報（sourceがsocialの場合に使用）
+    sns_platform = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        verbose_name='SNSプラットフォーム',
+        help_text='x, instagram, facebook, tiktok, youtube, line等'
+    )
+    campaign_code = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name='キャンペーンコード',
+        help_text='特定のキャンペーンやプロモーションの識別子'
+    )
+
     class Meta:
         verbose_name = 'キャンペーントラッキング'
         verbose_name_plural = 'キャンペーントラッキング'

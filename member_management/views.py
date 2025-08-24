@@ -75,16 +75,36 @@ class RegisterView(View):
                                     'news': CampaignTracking.Source.NEWS,
                                     'other': CampaignTracking.Source.OTHER,
                                 }
-                                source = source_map.get(user_data.utm_source, CampaignTracking.Source.OTHER)
 
-                                CampaignTracking.objects.create(
-                                    source=source,
-                                    session_id=campaign_session_id,
-                                    registered_user=user,
-                                    registered_at=timezone.now(),
-                                    accessed_at=timezone.now(),
-                                    is_manual_referral=user_data.manual_referral or False
-                                )
+                                # SNSプラットフォームのリスト
+                                sns_platforms = ['x', 'instagram', 'facebook', 'tiktok', 'youtube', 'line', 'discord', 'threads']
+
+                                # utm_sourceがSNSプラットフォームの場合
+                                if user_data.utm_source in sns_platforms:
+                                    source = CampaignTracking.Source.SOCIAL
+                                    sns_platform = user_data.utm_source
+                                else:
+                                    source = source_map.get(user_data.utm_source, CampaignTracking.Source.OTHER)
+                                    sns_platform = None
+
+                                tracking_data = {
+                                    'source': source,
+                                    'session_id': campaign_session_id,
+                                    'registered_user': user,
+                                    'registered_at': timezone.now(),
+                                    'accessed_at': timezone.now(),
+                                    'is_manual_referral': user_data.manual_referral or False
+                                }
+
+                                # SNSプラットフォーム情報があれば追加
+                                if sns_platform:
+                                    tracking_data['sns_platform'] = sns_platform
+
+                                # utm_campaignがあればキャンペーンコードとして保存
+                                if hasattr(user_data, 'utm_campaign') and user_data.utm_campaign:
+                                    tracking_data['campaign_code'] = user_data.utm_campaign
+
+                                CampaignTracking.objects.create(**tracking_data)
 
                                 referral_type = "手動設定" if user_data.manual_referral else "自動取得"
                                 api_logger.info(f"New campaign tracking created for user {user.id}, source: {user_data.utm_source} ({referral_type})")
