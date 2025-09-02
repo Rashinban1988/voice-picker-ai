@@ -127,6 +127,7 @@ INSTALLED_APPS = [
     'member_management.apps.MemberManagementConfig', # 会員管理
     'voice_picker.apps.VoicePickerConfig', # 音声文字起こし
     'ab_test.apps.AbTestConfig', # A/Bテスト
+    'analytics.apps.AnalyticsConfig', # LP分析
 ]
 
 AUTH_USER_MODEL = 'member_management.User'  # 'member_management'はカスタムユーザーモデルを定義したアプリ名

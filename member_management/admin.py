@@ -11,6 +11,8 @@ from .models.user import User
 from .models.subscription import Subscription, SubscriptionPlan
 from .models.campaign_tracking import CampaignTracking
 from voice_picker.models import Environment, ScheduledRecording
+from analytics.models import TrackingProject, PageView, UserInteraction
+from analytics.admin import TrackingProjectAdmin, PageViewAdmin, UserInteractionAdmin
 
 # スーパーユーザーのみがアクセスできるデコレーター
 def superuser_required(view_func):
@@ -206,6 +208,11 @@ class CustomAdminSite(admin.AdminSite):
                 'title': '💳 サブスクリプション管理',
                 'url': '/admin/member_management/subscription/',
                 'description': '課金状況の確認'
+            },
+            {
+                'title': '🎯 LP Analytics',
+                'url': '/admin/analytics/trackingproject/',
+                'description': 'ランディングページの分析とトラッキングID管理'
             }
         ]
 
@@ -222,10 +229,21 @@ class CustomAdminSite(admin.AdminSite):
             source='flyer',
             accessed_at__gte=week_ago
         ).count()
+        
+        # LP Analytics統計
+        lp_page_views = PageView.objects.filter(
+            created_at__gte=week_ago
+        ).count()
+        
+        lp_unique_sessions = PageView.objects.filter(
+            created_at__gte=week_ago
+        ).values('session_id').distinct().count()
 
         extra_context['quick_stats'] = {
             'recent_users': recent_users,
             'flyer_access': flyer_access,
+            'lp_page_views': lp_page_views,
+            'lp_unique_sessions': lp_unique_sessions,
         }
 
         return super().index(request, extra_context)
@@ -238,6 +256,11 @@ admin_site.register(Subscription, SubscriptionAdmin)
 admin_site.register(CampaignTracking, CampaignTrackingAdmin)
 admin_site.register(Environment, EnvironmentAdmin)
 admin_site.register(ScheduledRecording, ScheduledRecordingAdmin)
+
+# LP Analytics モデルを登録
+admin_site.register(TrackingProject, TrackingProjectAdmin)
+admin_site.register(PageView, PageViewAdmin)
+admin_site.register(UserInteraction, UserInteractionAdmin)
 
 # カスタム管理サイトを使用するように設定
 admin.site = admin_site

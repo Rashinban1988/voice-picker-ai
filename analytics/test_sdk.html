@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LP Analytics SDK テスト</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 40px;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #ff6b6b;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #ff5252;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        .feature {
+            background-color: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .long-content {
+            height: 800px;
+            background: linear-gradient(to bottom, #e3f2fd, #bbdefb);
+            padding: 40px;
+            margin: 40px 0;
+            border-radius: 10px;
+        }
+        .footer {
+            background-color: #333;
+            color: white;
+            padding: 40px;
+            text-align: center;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero" id="hero-section">
+            <h1>LP Analytics SDK テストページ</h1>
+            <p>このページでヒートマップとスクロール分析をテストします</p>
+            <button class="btn" id="cta-hero" data-track="hero-cta">メインCTA</button>
+            <button class="btn" id="demo-btn" data-track="demo-button">デモを見る</button>
+        </div>
+
+        <div class="features" id="features-section">
+            <div class="feature" data-track="feature-1">
+                <h3>機能1</h3>
+                <p>ヒートマップでクリック分析ができます</p>
+                <button class="btn" data-track="feature-1-btn">詳細を見る</button>
+            </div>
+            <div class="feature" data-track="feature-2">
+                <h3>機能2</h3>
+                <p>スクロール深度を測定します</p>
+                <button class="btn" data-track="feature-2-btn">詳細を見る</button>
+            </div>
+            <div class="feature" data-track="feature-3">
+                <h3>機能3</h3>
+                <p>リアルタイムで分析データを収集</p>
+                <button class="btn" data-track="feature-3-btn">詳細を見る</button>
+            </div>
+        </div>
+
+        <div class="long-content" id="long-content">
+            <h2>スクロールテスト用の長いコンテンツ</h2>
+            <p>このセクションはスクロール分析をテストするための長いコンテンツです。</p>
+            <p>ユーザーがどこまでスクロールしたかを測定します。</p>
+            <div style="height: 200px; background-color: rgba(255,255,255,0.5); margin: 20px 0; padding: 20px;">
+                <h3>サブセクション1</h3>
+                <p>ここにも重要なコンテンツがあります。</p>
+                <button class="btn" data-track="sub-cta-1">アクション1</button>
+            </div>
+            <div style="height: 200px; background-color: rgba(255,255,255,0.5); margin: 20px 0; padding: 20px;">
+                <h3>サブセクション2</h3>
+                <p>更に下にスクロールした場合のテストです。</p>
+                <button class="btn" data-track="sub-cta-2">アクション2</button>
+            </div>
+            <div style="height: 200px; background-color: rgba(255,255,255,0.5); margin: 20px 0; padding: 20px;">
+                <h3>サブセクション3</h3>
+                <p>最下部近くのコンテンツです。</p>
+                <button class="btn" data-track="sub-cta-3">最終アクション</button>
+            </div>
+        </div>
+
+        <div class="footer" id="footer-section">
+            <h3>フッターセクション</h3>
+            <p>ここまでスクロールしたユーザーを計測します</p>
+            <button class="btn" id="footer-cta" data-track="footer-cta">フッターCTA</button>
+        </div>
+    </div>
+
+    <!-- LP Analytics SDK -->
+    <script src="/static/js/lp-analytics.js"></script>
+    <script>
+        // SDK初期化（実際のトラッキングIDに置き換える）
+        const analytics = new LPAnalytics({
+            trackingId: 'lp_TEST123456789',  // テスト用ID
+            apiEndpoint: window.location.origin
+        });
+
+        // カスタムイベントのテスト
+        document.addEventListener('DOMContentLoaded', function() {
+            // ページロード完了のカスタムイベント
+            analytics.trackCustomEvent('page_loaded', {
+                page_type: 'test_page',
+                timestamp: new Date().toISOString()
+            });
+
+            // 5秒後に滞在イベント
+            setTimeout(() => {
+                analytics.trackCustomEvent('user_engaged', {
+                    engagement_time: 5000
+                });
+            }, 5000);
+
+            // フォームフォーカスのテスト（もしある場合）
+            const inputs = document.querySelectorAll('input, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    analytics.trackCustomEvent('form_focus', {
+                        field_name: input.name || input.id,
+                        field_type: input.type
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

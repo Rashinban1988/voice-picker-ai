@@ -29,6 +29,7 @@ urlpatterns = [
     path('admin/', admin_site.urls),
     path('voice_picker/', include('voice_picker.urls')),
     path('member_management/', include('member_management.urls')),
+    path('analytics/', include('analytics.urls')),
 
     path('api/', include('config.api_urls')),
 ]
