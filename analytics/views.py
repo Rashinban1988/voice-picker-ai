@@ -1,4 +1,4 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.utils import timezone
@@ -9,6 +9,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 import json
 import logging
+import os
+from django.conf import settings
 from .models import TrackingProject, PageView, UserInteraction, HeatmapData, ScrollDepth
 from django.shortcuts import get_object_or_404, render
 from .serializers import (
@@ -62,10 +64,18 @@ class PageViewCreateAPIView(APIView):
             if serializer.is_valid():
                 page_view = serializer.save()
                 logger.info(f"Page view created: {page_view.id} for project {page_view.project.tracking_id}")
-                return JsonResponse({
+
+                response = JsonResponse({
                     'success': True,
                     'page_view_id': str(page_view.id)
                 })
+
+                # CORS対応
+                response['Access-Control-Allow-Origin'] = '*'
+                response['Access-Control-Allow-Methods'] = 'POST'
+                response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+                return response
             else:
                 logger.warning(f"Page view creation failed: {serializer.errors}")
                 return JsonResponse({
@@ -94,10 +104,18 @@ class InteractionCreateAPIView(APIView):
                 if serializer.is_valid():
                     interactions = serializer.save()
                     logger.info(f"Batch interactions created: {len(interactions)} events")
-                    return JsonResponse({
+
+                    response = JsonResponse({
                         'success': True,
                         'created_count': len(interactions)
                     })
+
+                    # CORS対応
+                    response['Access-Control-Allow-Origin'] = '*'
+                    response['Access-Control-Allow-Methods'] = 'POST'
+                    response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+                    return response
                 else:
                     logger.warning(f"Batch interaction creation failed: {serializer.errors}")
                     return JsonResponse({
@@ -109,10 +127,18 @@ class InteractionCreateAPIView(APIView):
                 if serializer.is_valid():
                     interaction = serializer.save()
                     logger.info(f"Interaction created: {interaction.id}")
-                    return JsonResponse({
+
+                    response = JsonResponse({
                         'success': True,
                         'interaction_id': str(interaction.id)
                     })
+
+                    # CORS対応
+                    response['Access-Control-Allow-Origin'] = '*'
+                    response['Access-Control-Allow-Methods'] = 'POST'
+                    response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+                    return response
                 else:
                     logger.warning(f"Interaction creation failed: {serializer.errors}")
                     return JsonResponse({
@@ -165,11 +191,18 @@ class AnalyticsDashboardViewSet(viewsets.ReadOnlyModelViewSet):
                         'value': 1
                     })
 
-            return Response({
+            response = Response({
                 'success': True,
                 'data': heatmap_data,
                 'total_clicks': len(heatmap_data)
             })
+
+            # CORS対応
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+
+            return response
 
         except TrackingProject.DoesNotExist:
             return Response({
@@ -242,3 +275,34 @@ def test_page_view(request, tracking_id):
     }
 
     return render(request, 'analytics/test_page.html', context)
+
+
+def cdn_sdk_serve(request):
+    """CDN SDK配信エンドポイント"""
+    try:
+        # 静的ファイルパスを構築
+        sdk_path = os.path.join(settings.STATIC_ROOT, 'js', 'lp-analytics-cdn.js')
+
+        # 開発環境では静的ファイルが別の場所にある場合
+        if not os.path.exists(sdk_path):
+            sdk_path = os.path.join(settings.BASE_DIR, 'static', 'js', 'lp-analytics-cdn.js')
+
+        if not os.path.exists(sdk_path):
+            raise Http404("SDK file not found")
+
+        # ファイルを読み込み
+        with open(sdk_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # CORS対応のレスポンス
+        response = HttpResponse(content, content_type='application/javascript')
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        response['Cache-Control'] = 'public, max-age=3600'  # 1時間キャッシュ
+
+        return response
+
+    except Exception as e:
+        logger.error(f"SDK serving error: {e}")
+        return HttpResponse("SDK not available", status=404)

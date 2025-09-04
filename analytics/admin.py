@@ -31,7 +31,7 @@ class TrackingProjectForm(forms.ModelForm):
 # @admin.register(TrackingProject)  # 自動登録は使わない
 class TrackingProjectAdmin(admin.ModelAdmin):
     form = TrackingProjectForm
-    list_display = ['name', 'tracking_id', 'domain', 'organization', 'is_active', 'page_views_count', 'interactions_count', 'view_analytics_dashboard', 'view_heatmap', 'created_at']
+    list_display = ['name', 'tracking_id', 'domain', 'organization', 'is_active', 'page_views_count', 'interactions_count', 'view_analytics_dashboard', 'view_heatmap', 'get_sdk_snippet', 'created_at']
     list_filter = ['is_active', 'created_at', 'organization']
     search_fields = ['name', 'tracking_id', 'domain']
     readonly_fields = ['tracking_id', 'created_at', 'updated_at']
@@ -68,6 +68,30 @@ class TrackingProjectAdmin(admin.ModelAdmin):
             obj.id
         )
     view_heatmap.short_description = 'ヒートマップ'
+
+    def get_sdk_snippet(self, obj):
+        # requestはDjango admin contextから取得
+        request = None
+        if hasattr(self, '_request'):
+            request = self._request
+
+        base_url = 'http://localhost:8800'  # デフォルト
+        if request:
+            base_url = f"{request.scheme}://{request.get_host()}"
+
+        snippet = f'&lt;script src="{base_url}/analytics/sdk/lp-analytics.js" data-tracking-id="{obj.tracking_id}"&gt;&lt;/script&gt;'
+        return format_html(
+            '<details><summary style="cursor: pointer; color: #0066cc;">📦 SDK</summary>'
+            '<div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-left: 4px solid #0066cc;">'
+            '<strong>基本使用:</strong><br>'
+            '<code style="font-size: 11px; word-break: break-all;">{}</code><br><br>'
+            '<strong>自動生成モード:</strong><br>'
+            '<code style="font-size: 11px;">&lt;script src="{}/analytics/sdk/lp-analytics.js" data-auto-generate="true"&gt;&lt;/script&gt;</code>'
+            '</div></details>',
+            snippet,
+            base_url
+        )
+    get_sdk_snippet.short_description = 'SDK配布'
 
     def generate_analytics_report(self, request, queryset):
         # 選択されたプロジェクトの分析レポート生成
