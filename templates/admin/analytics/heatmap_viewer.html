@@ -1,0 +1,503 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ project.name }} - ヒートマップビューアー{% endblock %}
+
+{% block extrahead %}
+<script src="{% static 'js/heatmap-renderer.js' %}"></script>
+<style>
+    .heatmap-container {
+        position: relative;
+        width: 100%;
+        height: auto;
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        overflow: hidden;
+        background: white;
+    }
+    .page-iframe {
+        width: 100%;
+        height: 800px;
+        border: none;
+        /* pointer-events: none; スクロールできるようにコメントアウト */
+    }
+    .heatmap-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1000;
+    }
+    .heat-point {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+    }
+    .controls {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .stat-display {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    .legend {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+    }
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .button {
+        padding: 8px 16px;
+        margin: 2px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: bold;
+    }
+    .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        opacity: 0.9;
+    }
+    .button:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<h1>{{ project.name }} - ヒートマップビューアー</h1>
+
+<div class="controls">
+    <div class="stat-display">
+        総クリック数: <span id="total-clicks">{{ total_clicks }}</span>
+    </div>
+    
+    <div class="legend">
+        <span>強度:</span>
+        <div class="legend-color" style="background: rgba(255, 0, 0, 0.3);"></div>
+        <span>低</span>
+        <div class="legend-color" style="background: rgba(255, 0, 0, 0.7);"></div>
+        <span>中</span>
+        <div class="legend-color" style="background: rgba(255, 0, 0, 1);"></div>
+        <span>高</span>
+    </div>
+    
+    <button onclick="toggleHeatmap()" class="button" style="background: #4CAF50; color: white;">
+        ヒートマップ切り替え
+    </button>
+    
+    <button onclick="refreshData()" class="button" style="background: #2196F3; color: white;">
+        データ更新
+    </button>
+    
+    <button onclick="captureHeatmap()" class="button" style="background: #FF9800; color: white;">
+        📸 ヒートマップキャプチャ
+    </button>
+    
+    <button onclick="forceScrollSync()" class="button" style="background: #9C27B0; color: white;">
+        🔄 スクロール同期強制実行
+    </button>
+</div>
+
+<div class="heatmap-container" id="heatmap-container">
+    <!-- ページプレビュー選択 -->
+    <div style="margin-bottom: 10px;">
+        <label>表示方法: </label>
+        <select onchange="changeViewMode(this.value)" id="view-mode">
+            <option value="external">新しいウィンドウで開く</option>
+            <option value="iframe" selected>iframe版</option>
+            <option value="screenshot">スクリーンショット版</option>
+            <option value="blank">ヒートマップのみ</option>
+        </select>
+        
+        <input type="text" id="page-url-input" value="http://localhost:3001/lp" 
+               placeholder="ページURL" style="margin-left: 10px; width: 300px;">
+        <button onclick="loadPage()" class="button">ページ読み込み</button>
+        <button onclick="loadTestPage()" class="button" style="background: #FF5722; color: white;">
+            テストページ表示
+        </button>
+        <button onclick="openInNewWindow()" class="button" style="background: #4CAF50; color: white;">
+            🔗 新しいウィンドウで開く
+        </button>
+    </div>
+    
+    <!-- iframe版 -->
+    <iframe 
+        src="http://localhost:3001/lp" 
+        class="page-iframe"
+        id="page-iframe"
+        style="display: block;"
+    ></iframe>
+    
+    <!-- スクリーンショット版 -->
+    <div id="screenshot-container" class="page-iframe" 
+         style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); 
+                display: none; align-items: center; justify-content: center;
+                font-size: 18px; color: #666; flex-direction: column;">
+        📸 http://localhost:3001/lp のプレビュー
+        <br><small>実際のページを表示するには iframe表示 を選択してください</small>
+    </div>
+    
+    <!-- ヒートマップオーバーレイ -->
+    <div class="heatmap-overlay" id="heatmap-overlay"></div>
+</div>
+
+<div style="margin-top: 30px;">
+    <a href="/admin/analytics/trackingproject/" class="button">← プロジェクト一覧に戻る</a>
+    <a href="/admin/analytics/trackingproject/dashboard/{{ project.id }}/" class="button">📊 分析ダッシュボード</a>
+</div>
+
+<script>
+let heatmapRenderer = null
+let heatmapVisible = true
+// 実際のヒートマップデータ（初期は空）
+let currentHeatmapData = []
+
+// 高度なヒートマップ描画
+function initAdvancedHeatmap() {
+    const container = document.getElementById('heatmap-container')
+    console.log('ヒートマップレンダラー初期化中...', container) // デバッグ用
+    heatmapRenderer = new HeatmapRenderer(container, {
+        radius: 30,
+        blur: 20,
+        maxOpacity: 0.8,
+        minOpacity: 0.1
+    })
+    console.log('ヒートマップレンダラー初期化完了:', heatmapRenderer) // デバッグ用
+}
+
+// ヒートマップの描画
+function renderHeatmap(data) {
+    console.log('renderHeatmap呼び出し:', data, 'レンダラー:', heatmapRenderer, '表示中:', heatmapVisible) // デバッグ用
+    
+    if (heatmapRenderer) {
+        if (heatmapVisible && data && data.length > 0) {
+            console.log('ヒートマップを描画中...') // デバッグ用
+            heatmapRenderer.render(data)
+        } else {
+            console.log('ヒートマップをクリア中...') // デバッグ用
+            heatmapRenderer.clear()
+        }
+    } else {
+        console.error('ヒートマップレンダラーが初期化されていません') // デバッグ用
+    }
+}
+
+// ヒートマップ表示切り替え
+function toggleHeatmap() {
+    heatmapVisible = !heatmapVisible
+    if (heatmapRenderer) {
+        if (heatmapVisible) {
+            heatmapRenderer.show()
+            renderHeatmap(currentHeatmapData)
+        } else {
+            heatmapRenderer.hide()
+        }
+    }
+}
+
+// データ更新
+async function refreshData() {
+    try {
+        console.log('データ更新開始... プロジェクトID: {{ project.id }}')
+        
+        // CSRFトークンを取得
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        
+        const response = await fetch('/analytics/api/dashboard/{{ project.id }}/heatmap_data/', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken || '',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin'
+        })
+        console.log('API Response status:', response.status)
+        
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error('API Error response:', errorText)
+            throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        console.log('取得したデータ:', result) // デバッグ用
+        
+        if (result.success) {
+            // データをヒートマップ形式に変換
+            currentHeatmapData = result.data || []
+            document.getElementById('total-clicks').textContent = result.total_clicks || 0
+            console.log('新しいヒートマップデータ:', currentHeatmapData) // デバッグ用
+            
+            // Canvasを再描画
+            renderHeatmap(currentHeatmapData)
+            
+            // 成功メッセージを表示
+            alert(`データを更新しました。${currentHeatmapData.length}個のクリックポイント`)
+        } else {
+            console.error('データ取得エラー:', result.error)
+            alert('データ取得エラー: ' + result.error)
+        }
+    } catch (error) {
+        console.error('データの更新に失敗しました:', error)
+        alert('データの更新に失敗しました: ' + error.message)
+    }
+}
+
+// 座標変換（iframe内の座標を外部座標に変換）
+function transformCoordinates(x, y) {
+    const iframe = document.getElementById('page-iframe')
+    const iframeRect = iframe.getBoundingClientRect()
+    
+    return {
+        x: x + iframeRect.left,
+        y: y + iframeRect.top
+    }
+}
+
+// 表示モード切り替え
+function changeViewMode(mode) {
+    const iframe = document.getElementById('page-iframe')
+    const screenshot = document.getElementById('screenshot-container')
+    
+    console.log('表示モード切り替え:', mode)
+    
+    iframe.style.display = 'none'
+    screenshot.style.display = 'none'
+    
+    if (mode === 'external') {
+        // 新しいウィンドウで開く場合は何も表示しない
+        alert('「新しいウィンドウで開く」ボタンを押してページを開いてください')
+    } else if (mode === 'iframe') {
+        iframe.style.display = 'block'
+        console.log('iframe表示モードに切り替え')
+    } else if (mode === 'screenshot') {
+        screenshot.style.display = 'flex'
+        console.log('screenshot表示モードに切り替え')
+    }
+    // blank の場合は両方非表示
+    
+    setTimeout(() => {
+        if (heatmapRenderer) {
+            console.log('heatmapRenderer.resize()とrenderHeatmap()を実行中...')
+            heatmapRenderer.resize()
+            renderHeatmap(currentHeatmapData)
+        }
+    }, 500)
+}
+
+// 新しいウィンドウで開く
+function openInNewWindow() {
+    const url = document.getElementById('page-url-input').value
+    if (url) {
+        window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
+        alert('新しいウィンドウでページを開きました。\\nそのページでクリックするとヒートマップデータが収集されます。\\nしばらく操作後、このページで「データ更新」を押してください。')
+    }
+}
+
+// ページ読み込み
+function loadPage() {
+    let url = document.getElementById('page-url-input').value
+    const iframe = document.getElementById('page-iframe')
+    const mode = document.getElementById('view-mode').value
+    
+    // ポート3000を3001に自動変換
+    if (url.includes('localhost:3000')) {
+        url = url.replace('localhost:3000', 'localhost:3001')
+        document.getElementById('page-url-input').value = url
+    }
+    
+    if (mode === 'iframe' && url) {
+        iframe.src = url
+        console.log('iframeページ読み込み:', url)
+        
+        // スクロール監視のセットアップ
+        iframe.onload = function() {
+            if (heatmapRenderer) {
+                heatmapRenderer.findAndTrackIframe()
+            }
+        }
+    }
+}
+
+// テストページ表示
+function loadTestPage() {
+    const testUrl = '/analytics/test/{{ project.tracking_id }}/'
+    document.getElementById('page-url-input').value = testUrl
+    document.getElementById('view-mode').value = 'iframe'
+    
+    const iframe = document.getElementById('page-iframe')
+    iframe.src = testUrl
+    
+    changeViewMode('iframe')
+}
+
+// iframe内からのpostMessageを受信してスクロール連動
+window.addEventListener('message', function(event) {
+    if (event.data.type === 'iframe-scroll') {
+        console.log('postMessageでスクロール情報受信:', event.data)
+        if (heatmapRenderer) {
+            heatmapRenderer.scrollOffset = {
+                x: event.data.scrollX,
+                y: event.data.scrollY
+            }
+            heatmapRenderer.renderWithScroll()
+        }
+    }
+})
+
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('ページ初期化開始...') // デバッグ用
+    
+    // URL入力欄のポートを修正
+    const urlInput = document.getElementById('page-url-input')
+    if (urlInput.value.includes('localhost:3000')) {
+        urlInput.value = urlInput.value.replace('localhost:3000', 'localhost:3001')
+    }
+    
+    // iframe のsrcも修正
+    const iframe = document.getElementById('page-iframe')
+    if (iframe.src.includes('localhost:3000')) {
+        iframe.src = iframe.src.replace('localhost:3000', 'localhost:3001')
+    }
+    
+    console.log('HeatmapRenderer利用可能:', typeof HeatmapRenderer !== 'undefined') // デバッグ用
+    console.log('初期データ:', currentHeatmapData) // デバッグ用
+    
+    // 高度なヒートマップレンダラーを初期化
+    if (typeof HeatmapRenderer !== 'undefined') {
+        initAdvancedHeatmap()
+        
+        // 初回データ取得とヒートマップ描画
+        setTimeout(() => {
+            console.log('初回データ取得中...')
+            // refreshData()が初期化時に呼ばれるので、ここでは呼ばない
+        }, 1000)
+    } else {
+        console.error('HeatmapRendererが読み込まれていません')
+    }
+    
+    // 初期データを取得してから描画
+    refreshData()
+    
+    // iframe読み込み完了後にヒートマップをリフレッシュ
+    iframe.addEventListener('load', function() {
+        setTimeout(() => {
+            if (heatmapRenderer) {
+                heatmapRenderer.resize()
+                heatmapRenderer.findAndTrackIframe() // スクロール追跡再設定
+                renderHeatmap(currentHeatmapData)
+                
+                // iframe内のスクロール監視（代替手段）
+                setupIframeScrollDetection()
+            }
+        }, 1000)
+    })
+    
+    // iframe内スクロール検出の代替実装
+    let lastScrollPosition = { x: 0, y: 0 }
+    function setupIframeScrollDetection() {
+        // iframe要素自体のスクロールを監視
+        const iframe = document.getElementById('page-iframe')
+        if (iframe) {
+            // iframe要素にscrollイベントリスナーを追加
+            iframe.addEventListener('scroll', function() {
+                console.log('iframe外側スクロール検出')
+                if (heatmapRenderer) {
+                    heatmapRenderer.renderWithScroll()
+                }
+            })
+            
+            // 定期的にiframe内のスクロール位置をチェック（軽量版）
+            setInterval(() => {
+                try {
+                    if (iframe.contentWindow) {
+                        const currentScroll = {
+                            x: iframe.contentWindow.scrollX || 0,
+                            y: iframe.contentWindow.scrollY || 0
+                        }
+                        
+                        if (currentScroll.x !== lastScrollPosition.x || currentScroll.y !== lastScrollPosition.y) {
+                            console.log('iframe内スクロール検出:', currentScroll)
+                            lastScrollPosition = currentScroll
+                            if (heatmapRenderer) {
+                                heatmapRenderer.scrollOffset = currentScroll
+                                heatmapRenderer.renderWithScroll()
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // CORS制限でアクセスできない場合は何もしない
+                }
+            }, 1000) // 1秒間隔で軽量チェック
+        }
+    }
+})
+
+// 自動更新（60秒間隔に変更）
+setInterval(refreshData, 60000)
+
+// スクリーンショット機能
+function captureHeatmap() {
+    if (heatmapRenderer && heatmapRenderer.canvas) {
+        const link = document.createElement('a')
+        link.download = `heatmap_${Date.now()}.png`
+        link.href = heatmapRenderer.canvas.toDataURL()
+        link.click()
+    }
+}
+
+// スクロール同期強制実行
+function forceScrollSync() {
+    if (heatmapRenderer) {
+        const iframe = document.getElementById('page-iframe')
+        console.log('スクロール同期強制実行開始')
+        
+        try {
+            if (iframe && iframe.contentWindow) {
+                const scrollPos = {
+                    x: iframe.contentWindow.scrollX || 0,
+                    y: iframe.contentWindow.scrollY || 0
+                }
+                console.log('現在のiframeスクロール位置:', scrollPos)
+                heatmapRenderer.scrollOffset = scrollPos
+                heatmapRenderer.updateCanvasPosition()
+                heatmapRenderer.renderWithScroll()
+                
+                alert(`スクロール位置: x=${scrollPos.x}, y=${scrollPos.y}\nヒートマップを再描画しました。`)
+            }
+        } catch (e) {
+            console.error('スクロール同期エラー:', e)
+            alert('CORS制限によりiframe内のスクロール位置を取得できません。')
+        }
+    }
+}
+</script>
+
+{% endblock %}

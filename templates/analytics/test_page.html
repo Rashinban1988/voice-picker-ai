@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project.name }} - ヒートマップテストページ</title>
+    <style>
+        body {
+            font-family: 'Hiragino Sans', 'ヒラギノ角ゴ ProN W3', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding: 40px 0;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 15px;
+            margin-bottom: 40px;
+        }
+        .cta-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin: 40px 0;
+        }
+        .cta-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+        .feature-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border: 2px solid #f0f0f0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .feature-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+        }
+        .content-area {
+            background: #f8f9fa;
+            padding: 60px 40px;
+            margin: 40px 0;
+            border-radius: 15px;
+            text-align: center;
+        }
+        .footer {
+            background: #333;
+            color: white;
+            padding: 40px;
+            text-align: center;
+            margin-top: 60px;
+            border-radius: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ project.name }}</h1>
+            <p>ヒートマップ分析テストページ</p>
+        </div>
+
+        <div class="cta-section">
+            <button class="cta-button" data-track="primary-cta" onclick="trackClick('primary')">
+                🎯 メインCTA
+            </button>
+            <button class="cta-button" data-track="secondary-cta" onclick="trackClick('secondary')"
+                    style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                ⭐ セカンダリCTA
+            </button>
+            <button class="cta-button" data-track="trial-cta" onclick="trackClick('trial')"
+                    style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                🚀 無料トライアル
+            </button>
+        </div>
+
+        <div class="features">
+            <div class="feature-card" data-track="feature-1" onclick="trackClick('feature-1')">
+                <h3>🎤 音声認識</h3>
+                <p>高精度な音声認識技術で、会議の内容を正確にテキスト化します。</p>
+            </div>
+            <div class="feature-card" data-track="feature-2" onclick="trackClick('feature-2')">
+                <h3>🤖 AI分析</h3>
+                <p>AIが自動で要約・課題・アクションアイテムを抽出します。</p>
+            </div>
+            <div class="feature-card" data-track="feature-3" onclick="trackClick('feature-3')">
+                <h3>👥 話者分離</h3>
+                <p>複数の話者を自動で識別し、誰が何を話したかを明確にします。</p>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <h2>🎯 クリックテストエリア</h2>
+            <p>このエリアをクリックするとヒートマップにデータが蓄積されます</p>
+            <div style="display: flex; justify-content: center; gap: 20px; margin: 30px 0;">
+                <button class="cta-button" data-track="test-btn-1" onclick="trackClick('test-1')">
+                    テストボタン1
+                </button>
+                <button class="cta-button" data-track="test-btn-2" onclick="trackClick('test-2')"
+                        style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                    テストボタン2
+                </button>
+                <button class="cta-button" data-track="test-btn-3" onclick="trackClick('test-3')"
+                        style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333;">
+                    テストボタン3
+                </button>
+            </div>
+        </div>
+
+        <div class="footer">
+            <h3>フッターセクション</h3>
+            <button class="cta-button" data-track="footer-cta" onclick="trackClick('footer')"
+                    style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #333;">
+                📞 お問い合わせ
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // LP Analytics SDK の実装
+        class LPAnalytics {
+            constructor(config) {
+                this.trackingId = config.trackingId;
+                this.apiEndpoint = config.apiEndpoint;
+                this.sessionId = 'test_session_' + Date.now();
+                this.pageViewId = null;
+                this.eventQueue = [];
+                this.debug = config.debug || false;
+
+                this.init();
+            }
+
+            async init() {
+                await this.trackPageView();
+                this.setupEventListeners();
+                this.startBatchSending();
+            }
+
+            async trackPageView() {
+                try {
+                    const response = await fetch(`${this.apiEndpoint}/analytics/api/page-view/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tracking_id: this.trackingId,
+                            session_id: this.sessionId,
+                            page_url: window.location.href,
+                            user_agent: navigator.userAgent,
+                            viewport_width: window.innerWidth,
+                            viewport_height: window.innerHeight
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.pageViewId = data.page_view_id;
+                        if (this.debug) console.log('Page view tracked:', this.pageViewId);
+                    }
+                } catch (error) {
+                    console.error('Failed to track page view:', error);
+                }
+            }
+
+            setupEventListeners() {
+                document.addEventListener('click', this.handleClick.bind(this));
+                document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+            }
+
+            handleClick(event) {
+                const clickData = {
+                    page_view_id: this.pageViewId,
+                    event_type: 'click',
+                    x_coordinate: event.clientX,
+                    y_coordinate: event.clientY,
+                    element_selector: event.target.getAttribute('data-track') || event.target.tagName.toLowerCase(),
+                    timestamp: Date.now()
+                };
+                this.eventQueue.push(clickData);
+                if (this.debug) console.log('Click tracked:', clickData);
+            }
+
+            handleMouseMove(event) {
+                if (Math.random() < 0.1) { // Sample 10% of mouse moves
+                    const moveData = {
+                        page_view_id: this.pageViewId,
+                        event_type: 'mousemove',
+                        x_coordinate: event.clientX,
+                        y_coordinate: event.clientY,
+                        timestamp: Date.now()
+                    };
+                    this.eventQueue.push(moveData);
+                }
+            }
+
+            async startBatchSending() {
+                setInterval(async () => {
+                    if (this.eventQueue.length > 0) {
+                        await this.sendBatchEvents();
+                    }
+                }, 2000);
+            }
+
+            async sendBatchEvents() {
+                if (this.eventQueue.length === 0) return;
+
+                try {
+                    const events = this.eventQueue.splice(0);
+                    const response = await fetch(`${this.apiEndpoint}/analytics/api/interactions/`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ events })
+                    });
+
+                    if (this.debug) {
+                        console.log(`Sent ${events.length} events`);
+                    }
+                } catch (error) {
+                    console.error('Failed to send events:', error);
+                }
+            }
+        }
+
+        // Initialize analytics
+        const analytics = new LPAnalytics({
+            trackingId: '{{ tracking_id }}',
+            apiEndpoint: 'http://localhost:8800',
+            debug: true
+        });
+
+        function trackClick(buttonName) {
+            alert(`${buttonName} がクリックされました！\\nヒートマップにデータが記録されます。`);
+        }
+    </script>
+</body>
+</html>
