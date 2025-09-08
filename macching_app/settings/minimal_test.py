@@ -19,6 +19,7 @@ NEXT_JS_PORT = config('NEXT_JS_PORT', default='3000')
 
 # アプリケーション（最小構成）
 INSTALLED_APPS = [
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -28,6 +29,8 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'member_management.apps.MemberManagementConfig',
     'voice_picker.apps.VoicePickerConfig',
+    'analytics.apps.AnalyticsConfig',
+    'ab_test.apps.AbTestConfig',
 ]
 
 # ユーザーモデル
@@ -124,6 +127,11 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
+        },
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
         },
     },
 }

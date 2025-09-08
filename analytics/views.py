@@ -44,7 +44,17 @@ class TrackingProjectViewSet(viewsets.ModelViewSet):
 class PageViewCreateAPIView(APIView):
     permission_classes = [AllowAny]
 
+    def options(self, request):
+        """CORS preflight request handler"""
+        response = JsonResponse({})
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response
+
     def post(self, request):
+        print("DEBUG - PageViewCreateAPIView.post called")
+
         def get_client_ip(request):
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             if x_forwarded_for:
@@ -55,12 +65,26 @@ class PageViewCreateAPIView(APIView):
             return ip or '127.0.0.1'
 
         try:
-            data = json.loads(request.body) if isinstance(request.body, bytes) else request.data
+            if hasattr(request, 'data') and request.data:
+                data = request.data
+            else:
+                data = json.loads(request.body.decode('utf-8'))
+
             client_ip = get_client_ip(request)
             logger.info(f"Client IP detected: {client_ip}")
-            data['ip_address'] = client_ip
+            # 既にip_addressが設定されていない場合のみ自動取得IPを使用
+            if 'ip_address' not in data or not data['ip_address']:
+                data['ip_address'] = client_ip
+
+            print(f"DEBUG - Request data: {data}")
+            print(f"DEBUG - Request method: {request.method}")
+            print(f"DEBUG - Request headers: {dict(request.headers)}")
 
             serializer = PageViewSerializer(data=data)
+            print(f"DEBUG - Serializer is_valid: {serializer.is_valid()}")
+            if not serializer.is_valid():
+                print(f"DEBUG - Serializer errors: {serializer.errors}")
+                print(f"DEBUG - Validation failed, not calling create method")
             if serializer.is_valid():
                 page_view = serializer.save()
                 logger.info(f"Page view created: {page_view.id} for project {page_view.project.tracking_id}")
@@ -78,22 +102,56 @@ class PageViewCreateAPIView(APIView):
                 return response
             else:
                 logger.warning(f"Page view creation failed: {serializer.errors}")
-                return JsonResponse({
+                print(f"DEBUG - Data received: {data}")
+                print(f"DEBUG - Validation errors: {serializer.errors}")
+                # ValidationErrorをキャッチして500エラーとして扱わず、400エラーとして返す
+                response = JsonResponse({
                     'success': False,
                     'errors': serializer.errors
                 }, status=400)
+                response['Access-Control-Allow-Origin'] = '*'
+                response['Access-Control-Allow-Methods'] = 'POST'
+                response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+                return response
 
         except Exception as e:
+            import traceback
+            from rest_framework import serializers
             logger.error(f"Page view creation error: {e}")
-            return JsonResponse({
-                'success': False,
-                'error': 'Internal server error'
-            }, status=500)
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            print(f"DEBUG - Exception: {e}")
+            print(f"DEBUG - Traceback: {traceback.format_exc()}")
+
+            # ValidationErrorの場合は400エラーとして返す
+            if isinstance(e, serializers.ValidationError):
+                response = JsonResponse({
+                    'success': False,
+                    'errors': e.detail if hasattr(e, 'detail') else str(e)
+                }, status=400)
+            else:
+                response = JsonResponse({
+                    'success': False,
+                    'error': 'Internal server error',
+                    'debug_error': str(e)
+                }, status=500)
+
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'POST'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            return response
 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class InteractionCreateAPIView(APIView):
     permission_classes = [AllowAny]
+
+    def options(self, request):
+        """CORS preflight request handler"""
+        response = JsonResponse({})
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response
 
     def post(self, request):
         try:

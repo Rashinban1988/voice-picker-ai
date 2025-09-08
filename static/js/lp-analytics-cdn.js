@@ -15,17 +15,24 @@
 (function() {
     'use strict'
 
-    // CDN SDK設定を自動取得
-    const getCurrentScript = () => {
-        const scripts = document.getElementsByTagName('script')
-        return scripts[scripts.length - 1]
+    // CDN SDK設定を自動取得 - より確実な方法
+    const findLPAnalyticsScript = () => {
+        const scripts = document.querySelectorAll('script[src*="lp-analytics.js"]')
+        return scripts[scripts.length - 1] // 最後に見つかったものを使用
     }
 
-    const script = getCurrentScript()
-    let trackingId = script.getAttribute('data-tracking-id')
-    const apiEndpoint = script.getAttribute('data-api-endpoint') || window.location.origin
-    const debug = script.getAttribute('data-debug') === 'true'
-    const autoGenerate = script.getAttribute('data-auto-generate') === 'true'
+    let script = findLPAnalyticsScript()
+
+    // スクリプトが見つからない場合は、現在のスクリプトを使用
+    if (!script) {
+        const scripts = document.getElementsByTagName('script')
+        script = scripts[scripts.length - 1]
+    }
+
+    let trackingId = script ? script.getAttribute('data-tracking-id') : null
+    const apiEndpoint = script ? (script.getAttribute('data-api-endpoint') || window.location.origin) : window.location.origin
+    const debug = script ? script.getAttribute('data-debug') === 'true' : false
+    const autoGenerate = script ? script.getAttribute('data-auto-generate') === 'true' : false
 
     // 自動生成オプションが有効で、トラッキングIDが無い場合は生成
     if (!trackingId && autoGenerate) {
@@ -97,8 +104,8 @@
                         referrer: document.referrer || null,
                         session_id: this.config.sessionId,
                         user_agent: navigator.userAgent,
-                        viewport_width: window.innerWidth,
-                        viewport_height: window.innerHeight
+                        screen_width: screen.width,
+                        screen_height: screen.height
                     })
                 })
 
